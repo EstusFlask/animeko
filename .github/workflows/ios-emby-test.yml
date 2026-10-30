@@ -59,6 +59,16 @@ jobs:
           ios.version.code=6.4.1030
           kotlin.native.ignoreDisabledTargets=true
           EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          properties = Path("gradle.properties")
+          text = properties.read_text()
+          text = re.sub(r"(?m)^version\.name=.*$", "version.name=6.4.1-emby.bd31990c3", text)
+          text = re.sub(r"(?m)^ios\.version\.code=.*$", "ios.version.code=6.4.1030", text)
+          properties.write_text(text)
+          PY
           java -version
           xcodebuild -version
           pod --version
