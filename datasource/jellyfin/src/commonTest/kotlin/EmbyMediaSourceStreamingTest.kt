@@ -63,8 +63,9 @@ class EmbyMediaSourceStreamingTest {
                     episodeName = "Movie",
                 ),
             ).results.toList().single().media
-            val location = assertIs<ResourceLocation.HttpStreamingFile>(media.download)
-            val url = Url(location.uri)
+            val location = assertIs<ResourceLocation.WebVideo>(media.download)
+            assertEquals("123", location.apiParameters?.get("itemId"))
+            val url = Url(source.resolveApiVideo(media)!!.m3u8Url)
             assertEquals("/emby/Videos/123/stream", url.encodedPath)
             assertEquals("true", url.parameters["static"])
             assertEquals(token, url.parameters["api_key"])

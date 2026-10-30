@@ -20,6 +20,7 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import me.him188.ani.datasources.api.DefaultMedia
 import me.him188.ani.datasources.api.EpisodeSort
 import me.him188.ani.datasources.api.MediaExtraFiles
@@ -65,6 +66,13 @@ abstract class BaseJellyfinMediaSource(
     )
 
     protected abstract suspend fun getAuthorization(): Authorization
+
+    protected open fun getMediaId(itemId: String): String = itemId
+
+    protected open fun apiParameterName(name: String): String = name
+
+    protected open fun getDownloadLocation(itemId: String, accessToken: String): ResourceLocation =
+        ResourceLocation.HttpStreamingFile(getDownloadUri(itemId, accessToken))
 
     /**
      * Invalidates [authorization] after the server rejects it.
@@ -435,12 +443,10 @@ abstract class BaseJellyfinMediaSource(
 
         return MediaMatch(
             media = DefaultMedia(
-                mediaId = Id,
+                mediaId = getMediaId(Id),
                 mediaSourceId = mediaSourceId,
                 originalUrl = "$baseUrl/Items/$Id",
-                download = ResourceLocation.HttpStreamingFile(
-                    uri = getDownloadUri(Id, accessToken),
-                ),
+                download = getDownloadLocation(Id, accessToken),
                 originalTitle = originalTitle,
                 publishedTime = 0,
                 properties = MediaProperties(
@@ -580,14 +586,14 @@ abstract class BaseJellyfinMediaSource(
 
     private suspend fun doGetSeasons(seriesId: String): SearchResponse {
         return authorizedGet("$baseUrl/Shows/$seriesId/Seasons") {
-            parameter("fields", FIELD_PROVIDER_IDS)
+            parameter(apiParameterName("fields"), FIELD_PROVIDER_IDS)
         }
     }
 
     private suspend fun doGetEpisodes(seriesId: String, seasonNum: Int): SearchResponse {
         return authorizedGet("$baseUrl/Shows/$seriesId/Episodes") {
-            parameter("Season", seasonNum)
-            parameter("fields", FIELD_PROVIDER_IDS)
+            parameter(apiParameterName("Season"), seasonNum)
+            parameter(apiParameterName("fields"), FIELD_PROVIDER_IDS)
         }
     }
 
@@ -603,18 +609,23 @@ abstract class BaseJellyfinMediaSource(
         enableTotalRecordCount: Boolean? = null,
     ): SearchResponse {
         return authorizedGet("$baseUrl/Items") {
-            parameter("enableImages", false)
-            parameter("recursive", recursive)
-            subjectName?.let { parameter("searchTerm", it) }
-            parentId?.let { parameter("parentId", it) }
-            itemIds?.let { parameter("ids", it) }
-            fields?.let { parameter("fields", it) }
-            includeItemTypes?.let { parameter("includeItemTypes", it) }
-            startIndex?.let { parameter("startIndex", it) }
-            limit?.let { parameter("limit", it) }
-            enableTotalRecordCount?.let { parameter("enableTotalRecordCount", it) }
+            parameter(apiParameterName("enableImages"), false)
+            parameter(apiParameterName("recursive"), recursive)
+            subjectName?.let { parameter(apiParameterName("searchTerm"), it) }
+            parentId?.let { parameter(apiParameterName("parentId"), it) }
+            itemIds?.let { parameter(apiParameterName("ids"), it) }
+            fields?.let { parameter(apiParameterName("fields"), it) }
+            includeItemTypes?.let { parameter(apiParameterName("includeItemTypes"), it) }
+            startIndex?.let { parameter(apiParameterName("startIndex"), it) }
+            limit?.let { parameter(apiParameterName("limit"), it) }
+            enableTotalRecordCount?.let { parameter(apiParameterName("enableTotalRecordCount"), it) }
         }
     }
+
+    protected suspend fun authorizedGetJson(
+        url: String,
+        configure: HttpRequestBuilder.() -> Unit = {},
+    ): JsonObject = authorizedGet(url, configure)
 
     private suspend inline fun <reified T> authorizedGet(
         url: String,
@@ -628,7 +639,7 @@ abstract class BaseJellyfinMediaSource(
                 return client.use {
                     val response = get(url) {
                         header(HttpHeaders.Authorization, authorization.headerValue)
-                        parameter("userId", authorization.userId)
+                        parameter(apiParameterName("userId"), authorization.userId)
                         configure()
                     }
                     if (response.status == HttpStatusCode.Unauthorized) {

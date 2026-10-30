@@ -9,9 +9,18 @@
 
 package me.him188.ani.app.ui.settings.tabs.media.source
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.flowOf
 import me.him188.ani.app.ui.foundation.ProvideCompositionLocalsForPreview
 import me.him188.ani.app.ui.framework.runAniComposeUiTest
@@ -20,12 +29,71 @@ import me.him188.ani.datasources.api.source.MediaSourceConfig
 import me.him188.ani.datasources.api.source.MediaSourceInfo
 import me.him188.ani.datasources.api.source.parameter.buildMediaSourceParameters
 import me.him188.ani.datasources.api.source.parameter.hasValue
-import kotlin.coroutines.EmptyCoroutineContext
-import kotlin.test.Test
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import me.him188.ani.datasources.jellyfin.EmbyMediaSource
+import me.him188.ani.datasources.webdav.WebDavMediaSource
 
 class EditMediaSourceDialogTest {
+    @Test
+    fun `emby accepts a named server and username with an empty password`() = runAniComposeUiTest {
+        val factory = EmbyMediaSource.Factory()
+        val state = EditingMediaSource(
+            editingMediaSourceId = "emby-instance",
+            factoryId = factory.factoryId,
+            info = factory.info,
+            parameters = factory.parameters,
+            persistedArguments = flowOf(MediaSourceConfig.Default),
+            editMediaSourceMode = EditMediaSourceMode.Add(factory.factoryId),
+            onSave = {},
+            parentCoroutineContext = EmptyCoroutineContext,
+        )
+        try {
+            setContent {
+                ProvideCompositionLocalsForPreview { EditMediaSourceDialog(state, onDismissRequest = {}) }
+            }
+            onNodeWithTag(EditMediaSourceTestTags.argument("name")).performTextInput("Living room")
+            onNodeWithTag(EditMediaSourceTestTags.argument("authMode")).performScrollTo().performClick()
+            onNodeWithTag(EditMediaSourceTestTags.enumOption("authMode", EmbyMediaSource.AUTH_MODE_USERNAME_PASSWORD)).performClick()
+            onNodeWithTag(EditMediaSourceTestTags.argument("username")).performScrollTo().performTextInput("test-user")
+            onNodeWithTag(EditMediaSourceTestTags.argument("password"))
+                .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))
+            onNodeWithTag(EditMediaSourceTestTags.argument("apikey")).assertDoesNotExist()
+            assertFalse(state.hasError)
+            val config = state.createConfig()
+            assertEquals("Living room", config.arguments["name"])
+            assertEquals("test-user", config.arguments["username"])
+            assertEquals("", config.arguments["password"])
+        } finally {
+            state.close()
+        }
+    }
+
+    @Test
+    fun `webdav configuration saves a named anonymous server`() = runAniComposeUiTest {
+        val factory = WebDavMediaSource.Factory()
+        val state = EditingMediaSource(
+            editingMediaSourceId = "webdav-instance",
+            factoryId = factory.factoryId,
+            info = factory.info,
+            parameters = factory.parameters,
+            persistedArguments = flowOf(MediaSourceConfig.Default),
+            editMediaSourceMode = EditMediaSourceMode.Add(factory.factoryId),
+            onSave = {},
+            parentCoroutineContext = EmptyCoroutineContext,
+        )
+        try {
+            setContent {
+                ProvideCompositionLocalsForPreview { EditMediaSourceDialog(state, onDismissRequest = {}) }
+            }
+            assertTrue(state.hasError)
+            onNodeWithTag(EditMediaSourceTestTags.argument("name")).performTextInput("NAS")
+            onNodeWithTag(EditMediaSourceTestTags.argument("baseUrl")).performTextInput("https://nas.test/dav/")
+            assertFalse(state.hasError)
+            assertEquals("https://nas.test/dav/", state.createConfig().arguments["baseUrl"])
+        } finally {
+            state.close()
+        }
+    }
+
     @Test
     fun `switching authentication mode shows only its credential fields`() = runAniComposeUiTest {
         val apiKeyMode = "apiKey"
