@@ -18,7 +18,7 @@ env:
   RELEASE_TAG: ios-emby-bd31990c3
   IPA_NAME: Animeko-6.4.1-emby-bd31990c3.ipa
   JBR_URL: https://cache-redirector.jetbrains.com/intellij-jbr/jbrsdk_jcef-21.0.11-osx-x64-b1163.116.tar.gz
-  GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx8g -Dfile.encoding=UTF-8
+  GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx12g -Dfile.encoding=UTF-8
 
 jobs:
   ipa:
@@ -67,6 +67,9 @@ jobs:
           text = properties.read_text()
           text = re.sub(r"(?m)^version\.name=.*$", "version.name=6.4.1-emby.bd31990c3", text)
           text = re.sub(r"(?m)^ios\.version\.code=.*$", "ios.version.code=6.4.1030", text)
+          text = re.sub(r"(?m)^kotlin\.daemon\.jvmargs=.*$", "kotlin.daemon.jvmargs=-Xmx12g", text)
+          if not re.search(r"(?m)^kotlin\.daemon\.jvmargs=", text):
+              text += "\nkotlin.daemon.jvmargs=-Xmx12g\n"
           properties.write_text(text)
           PY
           java -version
