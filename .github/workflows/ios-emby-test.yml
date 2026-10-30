@@ -14,9 +14,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_COMMIT: bd31990c34f56e95b2efa7fa215c6e149998a230
-  RELEASE_TAG: ios-emby-bd31990c3
-  IPA_NAME: Animeko-6.4.1-emby-bd31990c3.ipa
+  SOURCE_COMMIT: 67cd529b3ccc19fa2f81e64a71bd2c62ca8183df
+  RELEASE_TAG: ios-emby-develop-67cd529b3
+  IPA_NAME: Animeko-4.9.0-emby-67cd529b3.ipa
   JBR_URL: https://cache-redirector.jetbrains.com/intellij-jbr/jbrsdk_jcef-21.0.11-osx-x64-b1163.116.tar.gz
   GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx12g -Dfile.encoding=UTF-8
 
@@ -55,8 +55,8 @@ jobs:
           ani.enable.ios=true
           ani.build.framework=true
           jvm.toolchain.version=21
-          version.name=6.4.1-emby.bd31990c3
-          ios.version.code=6.4.1030
+          version.name=4.9.0-emby.67cd529b3
+          ios.version.code=50406
           kotlin.native.ignoreDisabledTargets=true
           EOF
           python3 - <<'PY'
@@ -65,8 +65,8 @@ jobs:
 
           properties = Path("gradle.properties")
           text = properties.read_text()
-          text = re.sub(r"(?m)^version\.name=.*$", "version.name=6.4.1-emby.bd31990c3", text)
-          text = re.sub(r"(?m)^ios\.version\.code=.*$", "ios.version.code=6.4.1030", text)
+          text = re.sub(r"(?m)^version\.name=.*$", "version.name=4.9.0-emby.67cd529b3", text)
+          text = re.sub(r"(?m)^ios\.version\.code=.*$", "ios.version.code=50406", text)
           text = re.sub(r"(?m)^kotlin\.daemon\.jvmargs=.*$", "kotlin.daemon.jvmargs=-Xmx12g", text)
           if not re.search(r"(?m)^kotlin\.daemon\.jvmargs=", text):
               text += "\nkotlin.daemon.jvmargs=-Xmx12g\n"
@@ -108,8 +108,8 @@ jobs:
           app = Path(os.environ["RUNNER_TEMP"]) / "ipa-verification/Payload/Animeko.app"
           info = plistlib.loads((app / "Info.plist").read_bytes())
           assert info["CFBundleIdentifier"] == "org.animeko.animeko"
-          assert info["CFBundleShortVersionString"] == "6.4.1"
-          assert info["CFBundleVersion"] == "6.4.1030"
+          assert info["CFBundleShortVersionString"] == "4.9.0"
+          assert info["CFBundleVersion"] == "50406"
           assert (app / "Frameworks/application.framework/application").is_file()
           assert (app / "Frameworks/MediampFFmpegKit.framework/MediampFFmpegKit").is_file()
           repo = os.environ["GITHUB_REPOSITORY"]
@@ -119,7 +119,7 @@ jobs:
           download = f"https://github.com/{repo}/releases/download/{tag}/{ipa.name}"
           icon = f"https://raw.githubusercontent.com/{repo}/{commit}/app/ios/Animeko/Assets.xcassets/AppIcon.appiconset/512.png"
           description = (
-              "Emby static-streaming regression test, commit bd31990c3. "
+              "Emby playback test, develop commit 67cd529b3. "
               "M4 iPad Pro long-press speed-up stutter requires on-device verification."
           )
           version = {
@@ -138,7 +138,7 @@ jobs:
               "website": release,
               "iconURL": icon,
               "apps": [{
-                  "name": "Animeko Emby Test - bd31990c3",
+                  "name": "Animeko Emby Test - 67cd529b3",
                   "bundleIdentifier": info["CFBundleIdentifier"],
                   "developerName": "OpenAni contributors / EstusFlask test build",
                   "localizedDescription": description,
@@ -177,7 +177,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Animeko-Emby-bd31990c3
+          name: Animeko-Emby-67cd529b3
           path: dist/
           if-no-files-found: error
 
@@ -188,7 +188,7 @@ jobs:
           set -euo pipefail
           if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-              --target "$SOURCE_COMMIT" --title "Animeko Emby test - bd31990c3" \
+              --target "$SOURCE_COMMIT" --title "Animeko Emby develop test - 67cd529b3" \
               --prerelease --latest=false --notes-file dist/release-notes.md
           fi
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
