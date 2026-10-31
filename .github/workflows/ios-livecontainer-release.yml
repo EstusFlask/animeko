@@ -1,0 +1,268 @@
+name: iOS LiveContainer Release
+
+# iOS tasks follow open-ani/animeko/.github/workflows/src.main.kts:
+# prepareIosBuild and buildIosIpaRelease. This job uses a hosted Intel runner
+# with 14 GB RAM; the upstream ARM64 self-hosted runner is repository-specific.
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch, tag, or commit to build
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-livecontainer-release
+  cancel-in-progress: false
+
+env:
+  JBR_URL: https://cache-redirector.jetbrains.com/intellij-jbr/jbrsdk_jcef-21.0.11-osx-x64-b1163.116.tar.gz
+
+jobs:
+  ipa:
+    name: Release IPA and LiveContainer source
+    if: ${{ github.repository == 'EstusFlask/animeko' }}
+    runs-on: macos-15-intel
+    timeout-minutes: 300
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || 'main' }}
+
+      - name: Resolve application source
+        run: |
+          set -euo pipefail
+          commit=$(git rev-parse HEAD)
+          short=${commit:0:9}
+          {
+            echo "SOURCE_COMMIT=$commit"
+            echo "SOURCE_SHORT=$short"
+            echo "IOS_BUILD_NUMBER=$((50410 + GITHUB_RUN_NUMBER))"
+          } >> "$GITHUB_ENV"
+          echo "Application source: $commit"
+          git log -1 --format=%s
+          printf 'Application source: [%s](https://github.com/%s/commit/%s)\n' \
+            "$short" "$GITHUB_REPOSITORY" "$commit" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Download and verify JBR 21
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 "$JBR_URL" -o "$RUNNER_TEMP/jbr.tar.gz"
+          curl --fail --location --retry 3 "$JBR_URL.checksum" -o "$RUNNER_TEMP/jbr.checksum"
+          expected=$(awk '{print $1}' "$RUNNER_TEMP/jbr.checksum")
+          actual=$(shasum -a 512 "$RUNNER_TEMP/jbr.tar.gz" | awk '{print $1}')
+          test "$expected" = "$actual"
+          mkdir -p "$RUNNER_TEMP/jbr"
+          tar -xzf "$RUNNER_TEMP/jbr.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/jbr"
+          echo "JAVA_HOME=$RUNNER_TEMP/jbr/Contents/Home" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/jbr/Contents/Home/bin" >> "$GITHUB_PATH"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Configure Release build and shared Gradle limits
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+          cat > local.properties <<'EOF'
+          ani.enable.ios=true
+          ani.build.framework=true
+          jvm.toolchain.version=21
+          kotlin.native.ignoreDisabledTargets=true
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          properties = Path("gradle.properties")
+          text = properties.read_text(encoding="utf-8")
+          app_version = re.search(r"(?m)^version\.name=([^\r\n]+)", text).group(1).split("-", 1)[0]
+          # Xcode's CocoaPods invocation owns the Release framework link.
+          # The outer Gradle invocation only configures and packages the app.
+          settings = {
+              "version.name": app_version,
+              "ios.version.code": os.environ["IOS_BUILD_NUMBER"],
+              "org.gradle.jvmargs": "-Xmx12g -Dfile.encoding=UTF-8",
+              "org.gradle.workers.max": "2",
+              "org.gradle.parallel": "false",
+              "kotlin.compiler.execution.strategy": "in-process",
+              "kotlin.daemon.jvmargs": "-Xmx2g",
+          }
+          for key, value in settings.items():
+              pattern = rf"(?m)^{re.escape(key)}=.*$"
+              line = f"{key}={value}"
+              if re.search(pattern, text):
+                  text = re.sub(pattern, lambda match: line, text)
+              else:
+                  text += f"\n{line}\n"
+          properties.write_text(text, encoding="utf-8")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"APP_VERSION={app_version}\n")
+              env.write(f"IPA_NAME=Animeko-{app_version}.ipa\n")
+              env.write(f"RELEASE_TAG=v{app_version}\n")
+          PY
+          java -version
+          xcodebuild -version
+          pod --version
+          sysctl hw.memsize hw.ncpu
+          df -h .
+
+      - name: Check Apple architecture verification before compiling
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/verify-arm64.sh" <<'SH'
+          #!/bin/bash
+          set -euo pipefail
+          xcrun lipo "$1" -verify_arch arm64
+          SH
+          printf 'int architecture_smoke_test(void) { return 0; }\n' | \
+            xcrun clang -arch arm64 -x c -c -o "$RUNNER_TEMP/arm64-smoke.o" -
+          bash "$RUNNER_TEMP/verify-arm64.sh" "$RUNNER_TEMP/arm64-smoke.o"
+
+      - name: Prepare iOS framework and CocoaPods - upstream tasks
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          mkdir -p build-diagnostics
+          ./gradlew :app:shared:application:generateDummyFramework :app:ios:podInstall \
+            :app:ios:patchInfoPlist --stacktrace --console=plain \
+            '-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8' \
+            2>&1 | tee build-diagnostics/prepare.log
+          grep -q ':syncFramework' app/shared/application/application.podspec
+          test "${OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED:-NO}" != YES
+
+      - name: Build Release IPA - upstream task
+        timeout-minutes: 240
+        run: |
+          set -euo pipefail
+          (
+            while true; do
+              date -u '+Release build heartbeat: %Y-%m-%dT%H:%M:%SZ'
+              sysctl vm.swapusage
+              memory_pressure | tail -n 1
+              ps -axo pid,ppid,%cpu,rss,etime,comm | sort -k4 -nr | head -n 10 || true
+              sleep 60
+            done
+          ) > >(tee build-diagnostics/resources.log) 2>&1 &
+          monitor_pid=$!
+          trap 'kill "$monitor_pid" 2>/dev/null || true' EXIT
+          # CocoaPods invokes syncFramework with the Xcode platform settings.
+          # Exclude only the outer invocation's framework link; the independent
+          # CocoaPods invocation performs the optimized Release link once.
+          ./gradlew :app:ios:buildReleaseIpa \
+            -x :app:shared:application:linkPodReleaseFrameworkIosArm64 \
+            '-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8' \
+            --stacktrace --console=plain \
+            2>&1 | tee build-diagnostics/release.log
+
+      - name: Verify Release IPA
+        run: |
+          set -euo pipefail
+          mkdir -p dist "$RUNNER_TEMP/ipa-verification"
+          cp app/ios/build/archives/release/Animeko.ipa "dist/$IPA_NAME"
+          unzip -tq "dist/$IPA_NAME"
+          unzip -q "dist/$IPA_NAME" -d "$RUNNER_TEMP/ipa-verification"
+          app="$RUNNER_TEMP/ipa-verification/Payload/Animeko.app"
+          codesign --verify --deep --strict "$app"
+          bash "$RUNNER_TEMP/verify-arm64.sh" "$app/Animeko"
+          python3 - <<'PY'
+          import datetime
+          import hashlib
+          import json
+          import os
+          import plistlib
+          from pathlib import Path
+
+          ipa = Path("dist") / os.environ["IPA_NAME"]
+          app = Path(os.environ["RUNNER_TEMP"]) / "ipa-verification/Payload/Animeko.app"
+          info = plistlib.loads((app / "Info.plist").read_bytes())
+          assert info["CFBundleIdentifier"] == "org.animeko.animeko"
+          assert info["CFBundleShortVersionString"] == os.environ["APP_VERSION"]
+          assert info["CFBundleVersion"] == os.environ["IOS_BUILD_NUMBER"]
+          assert (app / "Frameworks/application.framework/application").is_file()
+          assert (app / "Frameworks/MediampFFmpegKit.framework/MediampFFmpegKit").is_file()
+          repo = os.environ["GITHUB_REPOSITORY"]
+          tag = os.environ["RELEASE_TAG"]
+          commit = os.environ["SOURCE_COMMIT"]
+          download = f"https://github.com/{repo}/releases/download/{tag}/{ipa.name}"
+          version = {
+              "version": info["CFBundleShortVersionString"],
+              "buildVersion": info["CFBundleVersion"],
+              "date": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "downloadURL": download,
+              "size": ipa.stat().st_size,
+              "minOSVersion": info["MinimumOSVersion"],
+              "localizedDescription": f"Animeko {info['CFBundleShortVersionString']} for iOS.",
+          }
+          Path("dist/ios-release.json").write_text(json.dumps(version, indent=2) + "\n")
+          checksum = hashlib.sha256(ipa.read_bytes()).hexdigest()
+          Path("dist/SHA256SUMS").write_text(f"{checksum}  {ipa.name}\n")
+          source = f"https://github.com/{repo}/releases/download/livecontainer-source/source.json"
+          notes = (
+              f"Animeko {info['CFBundleShortVersionString']} for iOS\n\n"
+              f"Build {info['CFBundleVersion']}. Release optimization; ad-hoc signed for LiveContainer or sideloading.\n\n"
+              f"Application source: [{commit[:9]}](https://github.com/{repo}/commit/{commit}).\n\n"
+              f"[Download IPA]({download}) · [LiveContainer source]({source})\n\n"
+              "Validation: IPA ZIP integrity, arm64 executable, bundle versions, "
+              "embedded playback frameworks, and ad-hoc code signatures.\n"
+          )
+          Path("dist/release-notes.md").write_text(notes)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write(notes)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && hashFiles('app/ios/build/archives/release/Animeko.ipa') != '' }}
+        with:
+          name: Animeko-${{ env.APP_VERSION }}
+          path: |
+            app/ios/build/archives/release/Animeko.ipa
+            dist/ios-release.json
+            dist/SHA256SUMS
+            dist/release-notes.md
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --target "$SOURCE_COMMIT" --title "Animeko $APP_VERSION" \
+              --draft --notes-file dist/release-notes.md
+          fi
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            "dist/$IPA_NAME" dist/ios-release.json dist/SHA256SUMS --clobber
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --draft=false --prerelease=false --latest --title "Animeko $APP_VERSION" \
+            --notes-file dist/release-notes.md
+
+      - name: Update persistent LiveContainer source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/livecontainer_source.py --repository "$GITHUB_REPOSITORY" --publish
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-livecontainer-release-diagnostics
+          path: |
+            build-diagnostics/
+            **/build/reports/tests/
+            app/ios/build/reports/
+          if-no-files-found: ignore
+          retention-days: 7

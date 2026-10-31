@@ -30,3 +30,17 @@
 uv run --with pyyaml python .github/workflows/test_issue_classification.py
 uv run --with pyyaml python .github/workflows/test_qa_review.py
 ```
+
+## iOS Release 与 LiveContainer 源
+
+`ios-livecontainer-release.yml` 直接维护，手动选择源分支或 commit（默认 `main`），通过上游 Gradle 任务构建 Release IPA，
+发布 `Animeko <版本号>`，资产名为 `Animeko-<版本号>.ipa`，应用名称为 `Animeko`、bundle ID 为 `org.animeko.animeko`。
+显示版本移除开发后缀，构建号单调递增。Release 同时包含 `ios-release.json` 元数据与 SHA256 校验。
+
+LiveContainer 订阅地址固定为 `https://github.com/EstusFlask/animeko/releases/download/livecontainer-source/source.json`。
+`livecontainer-source.yml` 在正式 Release 发布、编辑或删除时更新此资产，也支持手动运行。
+`livecontainer-source` 自身是独立的预发布源资产，不参与应用版本列表，不标记为最新应用 Release。
+
+手动发布时，先把 IPA 上传到草稿 Release，再点击发布；脚本可直接读取 IPA 的 Info.plist，无需自行编写源文件。
+源只收录正式发布且包含一个 Animeko IPA 的 Release，并保留历史版本。通过构建工作流发布时会直接调用相同脚本，
+因为 GITHUB_TOKEN 发出的 Release 事件不会触发其它工作流。将每次构建的旧源地址替换为上述固定地址后，后续无需重复添加源。
