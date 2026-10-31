@@ -27,6 +27,8 @@ class LiveContainerSourceTests(unittest.TestCase):
         self.assertEqual(2, len(newer["apps"][0]["versions"]))
         self.assertEqual("Animeko", newer["apps"][0]["name"])
         self.assertEqual("org.animeko.animeko", newer["apps"][0]["bundleIdentifier"])
+        icon = newer["iconURL"].split("/main/", 1)[1]
+        self.assertTrue((Path(__file__).resolve().parents[2] / icon).is_file())
 
     def test_rebuild_orders_by_numeric_build_number(self):
         source = module.build_source("owner/repo", [self.version(build="9"), self.version(build="10")])

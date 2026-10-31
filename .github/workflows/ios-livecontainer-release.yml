@@ -45,7 +45,7 @@ jobs:
           {
             echo "SOURCE_COMMIT=$commit"
             echo "SOURCE_SHORT=$short"
-            echo "IOS_BUILD_NUMBER=$((50410 + GITHUB_RUN_NUMBER))"
+            echo "IOS_BUILD_NUMBER=$((50420 + GITHUB_RUN_NUMBER))"
           } >> "$GITHUB_ENV"
           echo "Application source: $commit"
           git log -1 --format=%s

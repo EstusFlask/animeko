@@ -74,7 +74,7 @@ def build_source(repository, versions):
                 tuple(int(n) for n in version["buildVersion"].split(".")))
     versions = sorted(versions, key=version_key, reverse=True)
     latest = versions[0]
-    icon = f"https://raw.githubusercontent.com/{repository}/main/app/ios/Animeko/Assets.xcassets/AppIcon.appiconset/512.png"
+    icon = f"https://raw.githubusercontent.com/{repository}/main/app/ios/Animeko/Assets.xcassets/AppIcon.appiconset/1024.png"
     return {
         "name": "Animeko",
         "identifier": "com.estusflask.animeko.emby-test",
