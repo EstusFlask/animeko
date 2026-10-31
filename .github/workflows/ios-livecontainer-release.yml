@@ -6,6 +6,12 @@ name: iOS LiveContainer Release
 
 on:
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch, tag, or commit to build
+        required: true
+        default: develop
+        type: string
   push:
     branches: [codex/ios-upstream-release-67cd529b3]
     paths: [.github/workflows/ios-livecontainer-release.yml]
@@ -15,12 +21,10 @@ permissions:
 
 concurrency:
   group: ios-livecontainer-release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
-  SOURCE_COMMIT: 67cd529b3ccc19fa2f81e64a71bd2c62ca8183df
-  RELEASE_TAG: ios-emby-develop-67cd529b3-upstream-release
-  IPA_NAME: Animeko-4.9.0-emby-67cd529b3-release.ipa
+  IOS_BUILD_NUMBER: '50408'
   JBR_URL: https://cache-redirector.jetbrains.com/intellij-jbr/jbrsdk_jcef-21.0.11-osx-x64-b1163.116.tar.gz
 
 jobs:
@@ -34,7 +38,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.SOURCE_COMMIT }}
+          ref: ${{ inputs.source_ref || 'develop' }}
+
+      - name: Resolve application source
+        run: |
+          set -euo pipefail
+          commit=$(git rev-parse HEAD)
+          short=${commit:0:9}
+          echo "SOURCE_COMMIT=$commit" >> "$GITHUB_ENV"
+          echo "SOURCE_SHORT=$short" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=ios-develop-$short-release" >> "$GITHUB_ENV"
+          echo "Application source: $commit"
+          git log -1 --format=%s
+          printf 'Application source: [%s](https://github.com/%s/commit/%s)\n' \
+            "$short" "$GITHUB_REPOSITORY" "$commit" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Download and verify JBR 21
         run: |
@@ -65,15 +82,17 @@ jobs:
           EOF
           python3 - <<'PY'
           from pathlib import Path
+          import os
           import re
 
           properties = Path("gradle.properties")
           text = properties.read_text(encoding="utf-8")
-          # Xcode invokes Gradle through CocoaPods. Both invocations read these
-          # limits, including worker count and JVM compiler execution strategy.
+          app_version = re.search(r"(?m)^version\.name=([^\r\n]+)", text).group(1).split("-", 1)[0]
+          # Xcode's CocoaPods invocation owns the Release framework link.
+          # The outer Gradle invocation only configures and packages the app.
           settings = {
-              "version.name": "4.9.0-emby.67cd529b3",
-              "ios.version.code": "50407",
+              "version.name": f"{app_version}-develop.{os.environ['SOURCE_SHORT']}",
+              "ios.version.code": os.environ["IOS_BUILD_NUMBER"],
               "org.gradle.jvmargs": "-Xmx12g -Dfile.encoding=UTF-8",
               "org.gradle.workers.max": "2",
               "org.gradle.parallel": "false",
@@ -88,12 +107,27 @@ jobs:
               else:
                   text += f"\n{line}\n"
           properties.write_text(text, encoding="utf-8")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"APP_VERSION={app_version}\n")
+              env.write(f"IPA_NAME=Animeko-{app_version}-develop-{os.environ['SOURCE_SHORT']}-release.ipa\n")
           PY
           java -version
           xcodebuild -version
           pod --version
           sysctl hw.memsize hw.ncpu
           df -h .
+
+      - name: Check Apple architecture verification before compiling
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/verify-arm64.sh" <<'SH'
+          #!/bin/bash
+          set -euo pipefail
+          xcrun lipo "$1" -verify_arch arm64
+          SH
+          printf 'int architecture_smoke_test(void) { return 0; }\n' | \
+            xcrun clang -arch arm64 -x c -c -o "$RUNNER_TEMP/arm64-smoke.o" -
+          bash "$RUNNER_TEMP/verify-arm64.sh" "$RUNNER_TEMP/arm64-smoke.o"
 
       - name: Prepare iOS framework and CocoaPods - upstream tasks
         timeout-minutes: 30
@@ -102,7 +136,10 @@ jobs:
           mkdir -p build-diagnostics
           ./gradlew :app:shared:application:generateDummyFramework :app:ios:podInstall \
             :app:ios:patchInfoPlist --stacktrace --console=plain \
+            '-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8' \
             2>&1 | tee build-diagnostics/prepare.log
+          grep -q ':syncFramework' app/shared/application/application.podspec
+          test "${OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED:-NO}" != YES
 
       - name: Build Release IPA - upstream task
         timeout-minutes: 240
@@ -119,7 +156,13 @@ jobs:
           ) > >(tee build-diagnostics/resources.log) 2>&1 &
           monitor_pid=$!
           trap 'kill "$monitor_pid" 2>/dev/null || true' EXIT
-          ./gradlew :app:ios:buildReleaseIpa --stacktrace --info --console=plain \
+          # CocoaPods invokes syncFramework with the Xcode platform settings.
+          # Exclude only the outer invocation's framework link; the independent
+          # CocoaPods invocation performs the optimized Release link once.
+          ./gradlew :app:ios:buildReleaseIpa \
+            -x :app:shared:application:linkPodReleaseFrameworkIosArm64 \
+            '-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8' \
+            --stacktrace --console=plain \
             2>&1 | tee build-diagnostics/release.log
 
       - name: Verify IPA and create LiveContainer source
@@ -131,7 +174,7 @@ jobs:
           unzip -q "dist/$IPA_NAME" -d "$RUNNER_TEMP/ipa-verification"
           app="$RUNNER_TEMP/ipa-verification/Payload/Animeko.app"
           codesign --verify --deep --strict "$app"
-          xcrun lipo -verify_arch arm64 "$app/Animeko"
+          bash "$RUNNER_TEMP/verify-arm64.sh" "$app/Animeko"
           python3 - <<'PY'
           import datetime
           import hashlib
@@ -144,8 +187,8 @@ jobs:
           app = Path(os.environ["RUNNER_TEMP"]) / "ipa-verification/Payload/Animeko.app"
           info = plistlib.loads((app / "Info.plist").read_bytes())
           assert info["CFBundleIdentifier"] == "org.animeko.animeko"
-          assert info["CFBundleShortVersionString"] == "4.9.0"
-          assert info["CFBundleVersion"] == "50407"
+          assert info["CFBundleShortVersionString"] == os.environ["APP_VERSION"]
+          assert info["CFBundleVersion"] == os.environ["IOS_BUILD_NUMBER"]
           assert (app / "Frameworks/application.framework/application").is_file()
           assert (app / "Frameworks/MediampFFmpegKit.framework/MediampFFmpegKit").is_file()
           repo = os.environ["GITHUB_REPOSITORY"]
@@ -155,7 +198,7 @@ jobs:
           download = f"https://github.com/{repo}/releases/download/{tag}/{ipa.name}"
           icon = f"https://raw.githubusercontent.com/{repo}/{commit}/app/ios/Animeko/Assets.xcassets/AppIcon.appiconset/512.png"
           description = (
-              "Emby playback test, develop commit 67cd529b3. "
+              f"Develop commit {commit[:9]}, including Emby playback and manual browsing. "
               "M4 iPad Pro long-press speed-up stutter requires on-device verification."
           )
           version = {
@@ -174,7 +217,7 @@ jobs:
               "website": release,
               "iconURL": icon,
               "apps": [{
-                  "name": "Animeko Emby Test - 67cd529b3",
+                  "name": f"Animeko Develop - {commit[:9]}",
                   "bundleIdentifier": info["CFBundleIdentifier"],
                   "developerName": "OpenAni contributors / EstusFlask test build",
                   "localizedDescription": description,
@@ -196,7 +239,7 @@ jobs:
               "Test build for Emby playback on M4 iPad Pro.\n\n"
               f"Application source: [{commit[:9]}](https://github.com/{repo}/commit/{commit}). "
               "Release optimization; ad-hoc signed for LiveContainer or sideloading. "
-              "Built with the upstream prepareIosBuild / buildIosIpaRelease Gradle tasks.\n\n"
+              "Built with the upstream iOS Gradle tasks; CocoaPods builds the Release framework.\n\n"
               "This commit uses the Emby static video streaming endpoint with byte-range support. "
               "The M4 iPad Pro speed-up stutter has not been verified on a physical device.\n\n"
               f"[Download IPA]({download}) · "
@@ -204,8 +247,6 @@ jobs:
               "In LiveContainer, open Sources, tap +, and paste the source URL. "
               "Play the same Emby episode, wait for buffering, then repeatedly hold for speed-up "
               "and release. Compare with the previous build using the same enhancement settings.\n\n"
-              "Jellyfin/Emby desktop regression tests for this source commit passed in "
-              "[run 41141220240](https://github.com/EstusFlask/animeko/actions/runs/41141220240).\n\n"
               "Validation in this run: IPA ZIP integrity, arm64 executable, "
               "bundle versions, embedded playback frameworks, and ad-hoc code signatures.\n"
           )
@@ -215,10 +256,17 @@ jobs:
           PY
 
       - uses: actions/upload-artifact@v4
+        if: ${{ always() && hashFiles('app/ios/build/archives/release/Animeko.ipa') != '' }}
         with:
-          name: Animeko-Emby-67cd529b3-Release
-          path: dist/
+          name: Animeko-Develop-${{ env.SOURCE_SHORT }}-Release
+          path: |
+            app/ios/build/archives/release/Animeko.ipa
+            dist/source.json
+            dist/SHA256SUMS
+            dist/release-notes.md
           if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
 
       - name: Publish test prerelease
         env:
@@ -227,7 +275,7 @@ jobs:
           set -euo pipefail
           if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-              --target "$SOURCE_COMMIT" --title "Animeko Emby Release - 67cd529b3 (upstream tasks)" \
+              --target "$SOURCE_COMMIT" --title "Animeko Develop Release - $SOURCE_SHORT" \
               --prerelease --latest=false --notes-file dist/release-notes.md
           fi
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
