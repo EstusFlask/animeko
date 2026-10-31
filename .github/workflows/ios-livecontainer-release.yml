@@ -1,0 +1,246 @@
+name: iOS LiveContainer Release
+
+# iOS tasks follow open-ani/animeko/.github/workflows/src.main.kts:
+# prepareIosBuild and buildIosIpaRelease. This job uses a hosted Intel runner
+# with 14 GB RAM; the upstream ARM64 self-hosted runner is repository-specific.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/ios-upstream-release-67cd529b3]
+    paths: [.github/workflows/ios-livecontainer-release.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-livecontainer-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_COMMIT: 67cd529b3ccc19fa2f81e64a71bd2c62ca8183df
+  RELEASE_TAG: ios-emby-develop-67cd529b3-upstream-release
+  IPA_NAME: Animeko-4.9.0-emby-67cd529b3-release.ipa
+  JBR_URL: https://cache-redirector.jetbrains.com/intellij-jbr/jbrsdk_jcef-21.0.11-osx-x64-b1163.116.tar.gz
+
+jobs:
+  ipa:
+    name: Release IPA and LiveContainer source
+    runs-on: macos-15-intel
+    timeout-minutes: 300
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+
+      - name: Download and verify JBR 21
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 "$JBR_URL" -o "$RUNNER_TEMP/jbr.tar.gz"
+          curl --fail --location --retry 3 "$JBR_URL.checksum" -o "$RUNNER_TEMP/jbr.checksum"
+          expected=$(awk '{print $1}' "$RUNNER_TEMP/jbr.checksum")
+          actual=$(shasum -a 512 "$RUNNER_TEMP/jbr.tar.gz" | awk '{print $1}')
+          test "$expected" = "$actual"
+          mkdir -p "$RUNNER_TEMP/jbr"
+          tar -xzf "$RUNNER_TEMP/jbr.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/jbr"
+          echo "JAVA_HOME=$RUNNER_TEMP/jbr/Contents/Home" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/jbr/Contents/Home/bin" >> "$GITHUB_PATH"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Configure Release build and shared Gradle limits
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+          cat > local.properties <<'EOF'
+          ani.enable.ios=true
+          ani.build.framework=true
+          jvm.toolchain.version=21
+          kotlin.native.ignoreDisabledTargets=true
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          properties = Path("gradle.properties")
+          text = properties.read_text(encoding="utf-8")
+          # Xcode invokes Gradle through CocoaPods. Both invocations read these
+          # limits, including worker count and JVM compiler execution strategy.
+          settings = {
+              "version.name": "4.9.0-emby.67cd529b3",
+              "ios.version.code": "50407",
+              "org.gradle.jvmargs": "-Xmx12g -Dfile.encoding=UTF-8",
+              "org.gradle.workers.max": "2",
+              "org.gradle.parallel": "false",
+              "kotlin.compiler.execution.strategy": "in-process",
+              "kotlin.daemon.jvmargs": "-Xmx2g",
+          }
+          for key, value in settings.items():
+              pattern = rf"(?m)^{re.escape(key)}=.*$"
+              line = f"{key}={value}"
+              if re.search(pattern, text):
+                  text = re.sub(pattern, lambda match: line, text)
+              else:
+                  text += f"\n{line}\n"
+          properties.write_text(text, encoding="utf-8")
+          PY
+          java -version
+          xcodebuild -version
+          pod --version
+          sysctl hw.memsize hw.ncpu
+          df -h .
+
+      - name: Prepare iOS framework and CocoaPods - upstream tasks
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          mkdir -p build-diagnostics
+          ./gradlew :app:shared:application:generateDummyFramework :app:ios:podInstall \
+            :app:ios:patchInfoPlist --stacktrace --console=plain \
+            2>&1 | tee build-diagnostics/prepare.log
+
+      - name: Build Release IPA - upstream task
+        timeout-minutes: 240
+        run: |
+          set -euo pipefail
+          (
+            while true; do
+              date -u '+Release build heartbeat: %Y-%m-%dT%H:%M:%SZ'
+              sysctl vm.swapusage
+              memory_pressure | tail -n 1
+              ps -axo pid,ppid,%cpu,rss,etime,comm | sort -k4 -nr | head -n 10 || true
+              sleep 60
+            done
+          ) > >(tee build-diagnostics/resources.log) 2>&1 &
+          monitor_pid=$!
+          trap 'kill "$monitor_pid" 2>/dev/null || true' EXIT
+          ./gradlew :app:ios:buildReleaseIpa --stacktrace --info --console=plain \
+            2>&1 | tee build-diagnostics/release.log
+
+      - name: Verify IPA and create LiveContainer source
+        run: |
+          set -euo pipefail
+          mkdir -p dist "$RUNNER_TEMP/ipa-verification"
+          cp app/ios/build/archives/release/Animeko.ipa "dist/$IPA_NAME"
+          unzip -tq "dist/$IPA_NAME"
+          unzip -q "dist/$IPA_NAME" -d "$RUNNER_TEMP/ipa-verification"
+          app="$RUNNER_TEMP/ipa-verification/Payload/Animeko.app"
+          codesign --verify --deep --strict "$app"
+          xcrun lipo -verify_arch arm64 "$app/Animeko"
+          python3 - <<'PY'
+          import datetime
+          import hashlib
+          import json
+          import os
+          import plistlib
+          from pathlib import Path
+
+          ipa = Path("dist") / os.environ["IPA_NAME"]
+          app = Path(os.environ["RUNNER_TEMP"]) / "ipa-verification/Payload/Animeko.app"
+          info = plistlib.loads((app / "Info.plist").read_bytes())
+          assert info["CFBundleIdentifier"] == "org.animeko.animeko"
+          assert info["CFBundleShortVersionString"] == "4.9.0"
+          assert info["CFBundleVersion"] == "50407"
+          assert (app / "Frameworks/application.framework/application").is_file()
+          assert (app / "Frameworks/MediampFFmpegKit.framework/MediampFFmpegKit").is_file()
+          repo = os.environ["GITHUB_REPOSITORY"]
+          tag = os.environ["RELEASE_TAG"]
+          commit = os.environ["SOURCE_COMMIT"]
+          release = f"https://github.com/{repo}/releases/tag/{tag}"
+          download = f"https://github.com/{repo}/releases/download/{tag}/{ipa.name}"
+          icon = f"https://raw.githubusercontent.com/{repo}/{commit}/app/ios/Animeko/Assets.xcassets/AppIcon.appiconset/512.png"
+          description = (
+              "Emby playback test, develop commit 67cd529b3. "
+              "M4 iPad Pro long-press speed-up stutter requires on-device verification."
+          )
+          version = {
+              "version": info["CFBundleShortVersionString"],
+              "buildVersion": info["CFBundleVersion"],
+              "date": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "downloadURL": download,
+              "size": ipa.stat().st_size,
+              "minOSVersion": info["MinimumOSVersion"],
+              "localizedDescription": description,
+          }
+          source = {
+              "name": "Animeko Emby Test",
+              "identifier": "com.estusflask.animeko.emby-test",
+              "sourceURL": f"https://github.com/{repo}/releases/download/{tag}/source.json",
+              "website": release,
+              "iconURL": icon,
+              "apps": [{
+                  "name": "Animeko Emby Test - 67cd529b3",
+                  "bundleIdentifier": info["CFBundleIdentifier"],
+                  "developerName": "OpenAni contributors / EstusFlask test build",
+                  "localizedDescription": description,
+                  "iconURL": icon,
+                  "appPermissions": {
+                      "entitlements": [],
+                      "privacy": {"NSCameraUsageDescription": info["NSCameraUsageDescription"]},
+                  },
+                  **version,
+                  "versionDate": version["date"],
+                  "versions": [version],
+              }],
+              "news": [],
+          }
+          Path("dist/source.json").write_text(json.dumps(source, indent=2) + "\n")
+          checksum = hashlib.sha256(ipa.read_bytes()).hexdigest()
+          Path("dist/SHA256SUMS").write_text(f"{checksum}  {ipa.name}\n")
+          notes = (
+              "Test build for Emby playback on M4 iPad Pro.\n\n"
+              f"Application source: [{commit[:9]}](https://github.com/{repo}/commit/{commit}). "
+              "Release optimization; ad-hoc signed for LiveContainer or sideloading. "
+              "Built with the upstream prepareIosBuild / buildIosIpaRelease Gradle tasks.\n\n"
+              "This commit uses the Emby static video streaming endpoint with byte-range support. "
+              "The M4 iPad Pro speed-up stutter has not been verified on a physical device.\n\n"
+              f"[Download IPA]({download}) · "
+              f"[LiveContainer source](https://github.com/{repo}/releases/download/{tag}/source.json)\n\n"
+              "In LiveContainer, open Sources, tap +, and paste the source URL. "
+              "Play the same Emby episode, wait for buffering, then repeatedly hold for speed-up "
+              "and release. Compare with the previous build using the same enhancement settings.\n\n"
+              "Jellyfin/Emby desktop regression tests for this source commit passed in "
+              "[run 41141220240](https://github.com/EstusFlask/animeko/actions/runs/41141220240).\n\n"
+              "Validation in this run: IPA ZIP integrity, arm64 executable, "
+              "bundle versions, embedded playback frameworks, and ad-hoc code signatures.\n"
+          )
+          Path("dist/release-notes.md").write_text(notes)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write(notes)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Animeko-Emby-67cd529b3-Release
+          path: dist/
+          if-no-files-found: error
+
+      - name: Publish test prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --target "$SOURCE_COMMIT" --title "Animeko Emby Release - 67cd529b3 (upstream tasks)" \
+              --prerelease --latest=false --notes-file dist/release-notes.md
+          fi
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            "dist/$IPA_NAME" dist/source.json dist/SHA256SUMS --clobber
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-livecontainer-release-diagnostics
+          path: |
+            build-diagnostics/
+            **/build/reports/tests/
+            app/ios/build/reports/
+          if-no-files-found: ignore
+          retention-days: 7
