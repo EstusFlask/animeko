@@ -568,20 +568,16 @@ abstract class BaseJellyfinMediaSource(
         return ParsedSubjectName(name, null)
     }
 
-    private fun chineseToNumber(chinese: String): Int {
-        return when (chinese) {
-            "一" -> 1
-            "二" -> 2
-            "三" -> 3
-            "四" -> 4
-            "五" -> 5
-            "六" -> 6
-            "七" -> 7
-            "八" -> 8
-            "九" -> 9
-            "十" -> 10
-            else -> chinese.toIntOrNull() ?: 1
+    private fun chineseToNumber(chinese: String): Int? {
+        val digits = "一二三四五六七八九"
+        if (chinese.length == 1 && chinese[0] in digits) {
+            return digits.indexOf(chinese[0]) + 1
         }
+        val match = Regex("([一二三四五六七八九]?)十([一二三四五六七八九]?)").matchEntire(chinese)
+            ?: return null
+        val tens = match.groupValues[1].firstOrNull()?.let { digits.indexOf(it) + 1 } ?: 1
+        val ones = match.groupValues[2].firstOrNull()?.let { digits.indexOf(it) + 1 } ?: 0
+        return tens * 10 + ones
     }
 
     private suspend fun doGetSeasons(seriesId: String): SearchResponse {
@@ -673,6 +669,7 @@ private val Item.isPlayableSearchResult: Boolean
     get() = Type == TYPE_EPISODE || Type == TYPE_MOVIE
 
 private fun Item.matchesTargetSeason(targetSeason: Int?): Boolean {
+    if (Type == TYPE_MOVIE) return false
     if (targetSeason == null) return true
     return when (Type) {
         TYPE_SEASON -> IndexNumber == targetSeason

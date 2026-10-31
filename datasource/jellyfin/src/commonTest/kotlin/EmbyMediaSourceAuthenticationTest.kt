@@ -40,6 +40,32 @@ import kotlin.test.assertTrue
 
 class EmbyMediaSourceAuthenticationTest {
     @Test
+    fun `password playback authenticates with a token header without login metadata`() = runTest {
+        mockClient { request ->
+            when {
+                request.url.encodedPath.endsWith("AuthenticateByName") ->
+                    jsonResponse("""{"AccessToken":"playback-token","User":{"Id":"user"}}""")
+
+                request.url.encodedPath.endsWith("PlaybackInfo") -> {
+                    assertTrue(request.headers[HttpHeaders.Authorization].orEmpty().contains("DeviceId=\"animeko-server-one\""))
+                    jsonResponse("""{"MediaSources":[{"DirectStreamUrl":"/videos/123/original.mkv","RequiredHttpHeaders":{"Referer":"https://example.test/"}}]}""")
+                }
+
+                else -> jsonResponse("""{"Items":[{"Name":"Movie","Id":"123","Type":"Movie"}]}""")
+            }
+        }.use { client ->
+            val source = EmbyMediaSource(passwordConfig(), client.asScopedHttpClient(), "server-one")
+            val media = source.fetch(movieRequest()).results.toList().single().media
+            val video = source.resolveApiVideo(media)!!
+            assertEquals("/videos/123/original.mkv", Url(video.m3u8Url).encodedPath)
+            assertEquals(
+                mapOf(HttpHeaders.Referrer to "https://example.test/", "X-Emby-Token" to "playback-token"),
+                video.headers,
+            )
+        }
+    }
+
+    @Test
     fun `playback uses the server direct URL and required headers with PascalCase parameters`() = runTest {
         var playbackRequests = 0
         mockClient { request ->

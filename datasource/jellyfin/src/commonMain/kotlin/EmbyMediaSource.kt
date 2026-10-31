@@ -10,28 +10,41 @@
 package me.him188.ani.datasources.jellyfin
 
 import io.ktor.client.plugins.ClientRequestException
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.URLBuilder
 import io.ktor.http.Url
 import io.ktor.http.appendPathSegments
 import io.ktor.http.takeFrom
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
+import me.him188.ani.datasources.api.DefaultMedia
+import me.him188.ani.datasources.api.EpisodeSort
 import me.him188.ani.datasources.api.Media
+import me.him188.ani.datasources.api.MediaProperties
 import me.him188.ani.datasources.api.matcher.ApiVideoResolver
 import me.him188.ani.datasources.api.matcher.WebVideo
+import me.him188.ani.datasources.api.source.BrowseChannel
+import me.him188.ani.datasources.api.source.BrowseEpisode
+import me.him188.ani.datasources.api.source.BrowseSubject
 import me.him188.ani.datasources.api.source.FactoryId
 import me.him188.ani.datasources.api.source.MediaSource
 import me.him188.ani.datasources.api.source.MediaSourceConfig
 import me.him188.ani.datasources.api.source.MediaSourceFactory
 import me.him188.ani.datasources.api.source.MediaSourceInfo
 import me.him188.ani.datasources.api.source.MediaSourceKind
+import me.him188.ani.datasources.api.source.MediaSourceLocation
 import me.him188.ani.datasources.api.source.get
 import me.him188.ani.datasources.api.source.parameter.MediaSourceParameters
 import me.him188.ani.datasources.api.source.parameter.MediaSourceParametersBuilder
 import me.him188.ani.datasources.api.source.parameter.hasValue
+import me.him188.ani.datasources.api.topic.EpisodeRange
+import me.him188.ani.datasources.api.topic.FileSize
 import me.him188.ani.datasources.api.topic.ResourceLocation
 import me.him188.ani.utils.ktor.ScopedHttpClient
 
@@ -44,6 +57,7 @@ class EmbyMediaSource(
         const val ID = "emby"
         const val AUTH_MODE_API_KEY = "apiKey"
         const val AUTH_MODE_USERNAME_PASSWORD = "usernamePassword"
+        private const val BROWSE_PAGE_SIZE = 100
         private val playbackJson = Json { ignoreUnknownKeys = true }
         val INFO = MediaSourceInfo(
             displayName = "Emby",
@@ -110,6 +124,7 @@ class EmbyMediaSource(
     }
 
     override val kind: MediaSourceKind get() = MediaSourceKind.WEB
+    override val supportsBrowsing: Boolean get() = true
     override val info: MediaSourceInfo = MediaSourceInfo(
         displayName = config[Parameters.name].trim().ifEmpty { INFO.displayName },
         description = INFO.description,
@@ -176,6 +191,122 @@ class EmbyMediaSource(
             apiParameters = mapOf("itemId" to itemId),
         )
 
+    override suspend fun searchSubjects(keyword: String): List<BrowseSubject> = browseItems(
+        endpoint("Items"),
+        mapOf("SearchTerm" to keyword, "IncludeItemTypes" to "Series,Season,Movie", "Recursive" to "true"),
+    ).map { item ->
+        val title = if (item.Type == "Season" && !item.SeriesName.isNullOrBlank()) {
+            "${item.SeriesName} · ${item.Name}"
+        } else {
+            item.Name
+        }
+        BrowseSubject(
+            name = item.ProductionYear?.let { "$title ($it)" } ?: title,
+            url = endpoint("Items", item.Id),
+        )
+    }
+
+    override suspend fun browseSubject(subject: BrowseSubject): List<BrowseChannel> {
+        val id = browseItemId(subject.url)
+        val item = playbackJson.decodeFromJsonElement<EmbyBrowseItem>(authorizedGetJson(endpoint("Items", id)))
+        return when (item.Type) {
+            "Series" -> coroutineScope {
+                val requests = Semaphore(4)
+                browseItems(endpoint("Shows", id, "Seasons")).filter { it.Type == "Season" }.map { season ->
+                    async {
+                        requests.withPermit {
+                            BrowseChannel(name = season.Id, label = season.Name, episodes = browseEpisodes(season.Id))
+                        }
+                    }
+                }.awaitAll()
+            }
+
+            "Season" -> listOf(BrowseChannel(name = item.Id, label = item.Name, episodes = browseEpisodes(item.Id)))
+            "Movie", "Episode" -> listOf(BrowseChannel(name = null, episodes = listOf(item.toBrowseEpisode())))
+            else -> emptyList()
+        }
+    }
+
+    private suspend fun browseEpisodes(parentId: String): List<BrowseEpisode> = browseItems(
+        endpoint("Items"),
+        mapOf(
+            "ParentId" to parentId, "Recursive" to "true", "IncludeItemTypes" to "Episode",
+            "SortBy" to "IndexNumber", "SortOrder" to "Ascending",
+        ),
+    ).filter { it.Type == "Episode" }.map { it.toBrowseEpisode() }
+
+    private suspend fun browseItems(url: String, parameters: Map<String, String> = emptyMap()): List<EmbyBrowseItem> {
+        val items = linkedMapOf<String, EmbyBrowseItem>()
+        var startIndex = 0
+        while (true) {
+            val pageUrl = URLBuilder(url).apply {
+                parameters.forEach { (name, value) -> this.parameters.append(name, value) }
+                this.parameters.append("EnableImages", "false")
+                this.parameters.append("Limit", BROWSE_PAGE_SIZE.toString())
+                this.parameters.append("StartIndex", startIndex.toString())
+            }.buildString()
+            val page = playbackJson.decodeFromJsonElement<EmbyBrowseItems>(authorizedGetJson(pageUrl)).Items
+            val previousSize = items.size
+            page.forEach { items[it.Id] = it }
+            if (page.size < BROWSE_PAGE_SIZE || items.size == previousSize) break
+            startIndex += page.size
+        }
+        return items.values.toList()
+    }
+
+    private fun EmbyBrowseItem.toBrowseEpisode() = BrowseEpisode(
+        name = IndexNumber?.let { "$it $Name" } ?: Name,
+        url = endpoint("Items", Id),
+        episodeSort = IndexNumber?.let { EpisodeSort(it) },
+    )
+
+    private fun endpoint(vararg segments: String): String = URLBuilder(baseUrl).apply {
+        appendPathSegments(*segments)
+    }.buildString()
+
+    private fun browseItemId(url: String): String {
+        val server = Url(baseUrl)
+        val item = Url(url)
+        val prefix = server.encodedPath.trimEnd('/') + "/Items/"
+        require(item.protocol == server.protocol && item.host.equals(server.host, true) && item.port == server.port) {
+            "Emby browse item must belong to this server"
+        }
+        require(item.encodedPath.startsWith(prefix)) { "Emby browse item must use this server path" }
+        val id = item.encodedPath.removePrefix(prefix)
+        require(Regex("[A-Za-z0-9_-]+").matches(id)) { "Invalid Emby item ID" }
+        return id
+    }
+
+    override fun createMedia(
+        subject: BrowseSubject,
+        channelName: String?,
+        episode: BrowseEpisode,
+        episodeSort: EpisodeSort?,
+    ): Media {
+        browseItemId(subject.url)
+        val id = browseItemId(episode.url)
+        return DefaultMedia(
+            mediaId = getMediaId(id),
+            mediaSourceId = mediaSourceId,
+            originalUrl = episode.url,
+            download = getDownloadLocation(id, ""),
+            originalTitle = episode.name,
+            publishedTime = 0,
+            properties = MediaProperties(
+                subjectName = subject.name,
+                episodeName = episode.name,
+                subtitleLanguageIds = listOf("CHS"),
+                resolution = "",
+                alliance = mediaSourceId,
+                size = FileSize.Unspecified,
+                subtitleKind = null,
+            ),
+            episodeRange = episodeSort?.let { EpisodeRange.single(it) },
+            location = MediaSourceLocation.Lan,
+            kind = MediaSourceKind.WEB,
+        )
+    }
+
     override suspend fun resolveApiVideo(media: Media): WebVideo? {
         if (media.mediaSourceId != mediaSourceId) return null
         val location = media.download as? ResourceLocation.WebVideo ?: return null
@@ -198,7 +329,7 @@ class EmbyMediaSource(
         val headers = source?.RequiredHttpHeaders.orEmpty().toMutableMap()
         val resolvedUrl = URLBuilder(url).apply {
             if (sameOrigin) {
-                headers[HttpHeaders.Authorization] = authorization.headerValue
+                // Playback clients authenticate with the token; device metadata belongs to API requests.
                 headers["X-Emby-Token"] = authorization.accessToken
                 if (source?.AddApiKeyToDirectStreamUrl == true && parameters["api_key"] == null) {
                     parameters.append("api_key", authorization.accessToken)
@@ -219,4 +350,19 @@ private data class EmbyPlaybackSource(
     val DirectStreamUrl: String? = null,
     val RequiredHttpHeaders: Map<String, String> = emptyMap(),
     val AddApiKeyToDirectStreamUrl: Boolean = false,
+)
+
+@Serializable
+@Suppress("PropertyName")
+private data class EmbyBrowseItems(val Items: List<EmbyBrowseItem> = emptyList())
+
+@Serializable
+@Suppress("PropertyName")
+private data class EmbyBrowseItem(
+    val Name: String,
+    val Id: String,
+    val Type: String,
+    val SeriesName: String? = null,
+    val IndexNumber: Int? = null,
+    val ProductionYear: Int? = null,
 )

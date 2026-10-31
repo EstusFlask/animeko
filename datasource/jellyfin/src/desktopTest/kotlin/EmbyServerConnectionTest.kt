@@ -22,6 +22,7 @@ import me.him188.ani.datasources.api.EpisodeSort
 import me.him188.ani.datasources.api.source.ConnectionStatus
 import me.him188.ani.datasources.api.source.MediaFetchRequest
 import me.him188.ani.datasources.api.source.MediaSourceConfig
+import me.him188.ani.datasources.api.topic.ResourceLocation
 import me.him188.ani.utils.ktor.asScopedHttpClient
 import me.him188.ani.utils.ktor.createDefaultHttpClient
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
@@ -46,12 +47,16 @@ class EmbyServerConnectionTest {
                 instanceId = "development-verification",
             )
             assertEquals(ConnectionStatus.SUCCESS, source.checkConnection())
+            val expectedItemId = System.getenv("ANI_EMBY_TEST_ITEM_ID")
             val media = source.fetch(
                 MediaFetchRequest(
                     subjectId = "", episodeId = "", subjectNameCN = title, subjectNames = listOf(title),
                     episodeSort = EpisodeSort(1), episodeName = title,
                 ),
-            ).results.toList().firstOrNull()?.media
+            ).results.toList().firstOrNull { match ->
+                expectedItemId == null ||
+                    (match.media.download as? ResourceLocation.WebVideo)?.apiParameters?.get("itemId") == expectedItemId
+            }?.media
             val video = assertNotNull(source.resolveApiVideo(assertNotNull(media)))
             client.prepareGet(video.m3u8Url) {
                 video.headers.forEach { (name, value) -> header(name, value) }
