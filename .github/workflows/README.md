@@ -34,6 +34,7 @@ uv run --with pyyaml python .github/workflows/test_qa_review.py
 ## Fork 多平台 Release
 
 `fork-release.yml` 直接维护，手动指定应用源码 `source_ref` 与版本标签 `release_tag`。
+Android 与桌面构建使用附带 JCEF 的 JetBrains Runtime 21，满足仓库的 `jvm.toolchain.vendor=jetbrains` 要求。
 发布分支的运行入口是已有的 `ios-livecontainer-release.yml`：选择发布分支，并填写非空的 `release_tag`，
 调用该分支的多平台工作流；`release_tag` 留空时构建独立 iOS IPA。
 Android 与桌面平台使用同一份固定 commit，已有标签必须指向该 commit；源码的基础版本必须与标签一致。
