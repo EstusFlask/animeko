@@ -1,4 +1,5 @@
 name: iOS LiveContainer Release
+run-name: ${{ inputs.release_tag && format('Multiplatform Release {0}', inputs.release_tag) || 'iOS LiveContainer Release' }}
 
 # iOS tasks follow open-ani/animeko/.github/workflows/src.main.kts:
 # prepareIosBuild and buildIosIpaRelease. This job uses a hosted Intel runner
@@ -12,6 +13,16 @@ on:
         required: true
         default: main
         type: string
+      release_tag:
+        description: Version tag for all platforms; leave empty to build iOS only
+        required: false
+        default: ''
+        type: string
+      ios_release_tag:
+        description: Published IPA to reuse for a multiplatform release
+        required: false
+        default: v4.9.1
+        type: string
 
 permissions:
   contents: write
@@ -24,9 +35,18 @@ env:
   JBR_URL: https://cache-redirector.jetbrains.com/intellij-jbr/jbrsdk_jcef-21.0.11-osx-x64-b1163.116.tar.gz
 
 jobs:
+  multiplatform:
+    if: ${{ github.repository == 'EstusFlask/animeko' && inputs.release_tag != '' }}
+    uses: ./.github/workflows/fork-release.yml
+    secrets: inherit
+    with:
+      source_ref: ${{ inputs.source_ref }}
+      release_tag: ${{ inputs.release_tag }}
+      ios_release_tag: ${{ inputs.ios_release_tag }}
+
   ipa:
     name: Release IPA and LiveContainer source
-    if: ${{ github.repository == 'EstusFlask/animeko' }}
+    if: ${{ github.repository == 'EstusFlask/animeko' && inputs.release_tag == '' }}
     runs-on: macos-15-intel
     timeout-minutes: 300
     defaults:

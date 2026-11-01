@@ -1,0 +1,425 @@
+name: Fork Multiplatform Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Application branch, tag, or commit
+        required: true
+        default: main
+        type: string
+      release_tag:
+        description: Version tag pointing at the application source, for example v4.9.1-fork.1
+        required: true
+        type: string
+      ios_release_tag:
+        description: Published release containing the existing iOS IPA
+        required: true
+        default: v4.9.1
+        type: string
+  workflow_call:
+    inputs:
+      source_ref:
+        required: true
+        type: string
+      release_tag:
+        required: true
+        type: string
+      ios_release_tag:
+        required: false
+        default: v4.9.1
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-multiplatform-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  prepare:
+    if: ${{ github.repository == 'EstusFlask/animeko' }}
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      version: ${{ steps.source.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+      - name: Check source, version, and signing configuration
+        id: source
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SIGNING_RELEASE_STOREFILE: ${{ secrets.SIGNING_RELEASE_STOREFILE }}
+          SIGNING_RELEASE_STOREPASSWORD: ${{ secrets.SIGNING_RELEASE_STOREPASSWORD }}
+          SIGNING_RELEASE_KEYALIAS: ${{ secrets.SIGNING_RELEASE_KEYALIAS }}
+          SIGNING_RELEASE_KEYPASSWORD: ${{ secrets.SIGNING_RELEASE_KEYPASSWORD }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          tag = os.environ['RELEASE_TAG']
+          if not re.fullmatch(r'v[1-9][0-9]*\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*)?', tag):
+              raise SystemExit('release_tag must be a version tag such as v4.9.1-fork.1')
+          version = tag[1:]
+          current = re.search(r'(?m)^version\.name=(.+)$', Path('gradle.properties').read_text(encoding='utf-8')).group(1).strip()
+          if current.split('-')[0] != version.split('-')[0]:
+              raise SystemExit(f'Source version {current} does not match requested version {version}')
+          commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          refs = subprocess.check_output(['git', 'ls-remote', 'origin', f'refs/tags/{tag}', f'refs/tags/{tag}^{{}}'], text=True).splitlines()
+          if refs and refs[-1].split()[0] != commit:
+              raise SystemExit('The existing release tag points at another commit; choose a distinct fork tag')
+          for name in ('SIGNING_RELEASE_STOREFILE', 'SIGNING_RELEASE_STOREPASSWORD', 'SIGNING_RELEASE_KEYALIAS', 'SIGNING_RELEASE_KEYPASSWORD'):
+              if not os.environ.get(name):
+                  raise SystemExit(f'Missing repository secret: {name}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'commit={commit}\nversion={version}\n')
+          PY
+
+  desktop:
+    needs: prepare
+    name: Desktop (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x86_64
+            runner: windows-2022
+            jbr: windows-x64
+          - platform: windows-aarch64
+            runner: windows-11-arm
+            jbr: windows-aarch64
+          - platform: macos-x86_64
+            runner: macos-15-intel
+            jbr: osx-x64
+          - platform: macos-aarch64
+            runner: macos-15
+            jbr: osx-aarch64
+          - platform: linux-x86_64
+            runner: ubuntu-24.04
+            jbr: linux-x64
+    env:
+      APP_VERSION: ${{ needs.prepare.outputs.version }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      PLATFORM: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          submodules: recursive
+      - name: Download and verify JBR
+        id: jbr
+        env:
+          RUNNER_TOOL_CACHE: ${{ runner.tool_cache }}
+          JBR_URL: https://cache-redirector.jetbrains.com/intellij-jbr/jbrsdk_jcef-21.0.11-${{ matrix.jbr }}-b1163.116.tar.gz
+          JBR_CHECKSUM_URL: https://cache-redirector.jetbrains.com/intellij-jbr/jbrsdk_jcef-21.0.11-${{ matrix.jbr }}-b1163.116.tar.gz.checksum
+        run: python .github/workflows/download_jbr.py
+      - uses: gmitch215/setup-java@6d2c5e1f82f180ae79f799f0ed6e3e5efb4e664d
+        with:
+          java-version: '21'
+          distribution: jdkfile
+          jdkFile: ${{ steps.jbr.outputs.jbrLocation }}
+      - uses: android-actions/setup-android@v3
+        if: ${{ matrix.platform == 'windows-aarch64' }}
+        with:
+          packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Configure application build
+        env:
+          DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}
+          DANDANPLAY_APP_SECRET: ${{ secrets.DANDANPLAY_APP_SECRET }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          properties = Path('gradle.properties')
+          text = properties.read_text(encoding='utf-8')
+          settings = {'version.name': os.environ['APP_VERSION'], 'package.version': os.environ['APP_VERSION'].split('-')[0],
+                      'org.gradle.jvmargs': '-Xmx4g -Dfile.encoding=UTF-8', 'org.gradle.workers.max': '2',
+                      'org.gradle.parallel': 'false', 'kotlin.compiler.execution.strategy': 'in-process'}
+          for key, value in settings.items():
+              pattern = rf'(?m)^{re.escape(key)}=.*$'
+              text = re.sub(pattern, lambda match: f'{key}={value}', text) if re.search(pattern, text) else text + f'\n{key}={value}\n'
+          properties.write_text(text, encoding='utf-8')
+          local = ['jvm.toolchain.version=21', 'ani.enable.ios=false', 'kotlin.native.ignoreDisabledTargets=true',
+                   'ani.android.abis=' + ('arm64-v8a' if 'aarch64' in os.environ['PLATFORM'] else 'x86_64')]
+          for key, env in [('ani.dandanplay.app.id', 'DANDANPLAY_APP_ID'), ('ani.dandanplay.app.secret', 'DANDANPLAY_APP_SECRET')]:
+              if os.environ.get(env):
+                  local.append(f'{key}={os.environ[env]}')
+          Path('local.properties').write_text('\n'.join(local) + '\n', encoding='utf-8')
+          PY
+      - name: Prepare Linux packaging dependencies
+        if: ${{ runner.os == 'Linux' }}
+        run: sudo apt-get update && sudo apt-get install -y patchelf libfuse2
+      - name: Build release distribution and update manifest
+        env:
+          DEV_BUILD_PACKAGE_NAME: ani-${{ env.APP_VERSION }}-${{ matrix.platform }}.zip
+          CI_TAG: ${{ inputs.release_tag }}
+        run: ./gradlew :ci-helper:prepareDevBuildDesktopPackage --no-configuration-cache --stacktrace --console=plain
+      - name: Build Apple Silicon DMG
+        if: ${{ matrix.platform == 'macos-aarch64' }}
+        run: ./gradlew :app:desktop:packageReleaseDistributionForCurrentOS --no-configuration-cache --stacktrace --console=plain
+      - name: Verify macOS signature
+        if: ${{ runner.os == 'macOS' }}
+        run: codesign --verify --deep --strict app/desktop/build/compose/binaries/main-release/app/*.app
+      - name: Collect desktop packages
+        run: |
+          mkdir -p dist
+          cp ci-helper/build/dev-build-package/* dist/
+          if [ "$PLATFORM" = macos-aarch64 ]; then
+            cp app/desktop/build/compose/binaries/main-release/dmg/*.dmg "dist/ani-$APP_VERSION-macos-aarch64.dmg"
+          fi
+      - name: Build Linux AppImage and update metadata
+        if: ${{ runner.os == 'Linux' }}
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -o appimagetool
+          curl -fL --retry 3 https://github.com/AppImageCommunity/AppImageUpdate/releases/download/2.0.0-alpha-1-20251018/appimageupdatetool-x86_64.AppImage -o appimageupdatetool-x86_64.AppImage
+          echo 'd976cdac667b03dee8cb23fb95ef74b042c406c5cbab3ff294d2b16efeaff84f  appimageupdatetool-x86_64.AppImage' | sha256sum -c -
+          chmod +x appimagetool appimageupdatetool-x86_64.AppImage
+          mkdir -p AppDir/usr
+          cp -a app/desktop/build/compose/binaries/main-release/app/Ani/. AppDir/usr/
+          cp appimageupdatetool-x86_64.AppImage AppDir/usr/lib/app/resources/
+          cp app/desktop/appResources/linux-x64/{AppRun,animeko.desktop,icon.png} AppDir/
+          chmod +x AppDir/AppRun AppDir/usr/bin/Ani
+          test -x AppDir/usr/lib/runtime/lib/jcef_helper
+          asset="ani-$APP_VERSION-linux-x86_64.appimage"
+          ARCH=x86_64 ./appimagetool -u "zsync|https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$asset.zsync" AppDir "dist/$asset"
+          sed -i "s|^URL:.*|URL: $asset|" "dist/$asset.zsync"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fork-release-${{ matrix.platform }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  android:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      APP_VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Configure signed Android release
+        env:
+          SIGNING_RELEASE_STOREFILE: ${{ secrets.SIGNING_RELEASE_STOREFILE }}
+          DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}
+          DANDANPLAY_APP_SECRET: ${{ secrets.DANDANPLAY_APP_SECRET }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import os
+          import re
+          from pathlib import Path
+
+          key = Path(os.environ['RUNNER_TEMP']) / 'android-release.keystore'
+          key.write_bytes(base64.b64decode(os.environ['SIGNING_RELEASE_STOREFILE'], validate=True))
+          key.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write(f'signing_release_storeFile={key}\n')
+          properties = Path('gradle.properties')
+          text = re.sub(r'(?m)^version\.name=.*$', lambda match: 'version.name=' + os.environ['APP_VERSION'], properties.read_text(encoding='utf-8'))
+          for name, value in {'org.gradle.jvmargs': '-Xmx6g -Dfile.encoding=UTF-8', 'org.gradle.workers.max': '2',
+                              'org.gradle.parallel': 'false', 'kotlin.compiler.execution.strategy': 'in-process'}.items():
+              pattern = rf'(?m)^{re.escape(name)}=.*$'
+              text = re.sub(pattern, lambda match: f'{name}={value}', text) if re.search(pattern, text) else text + f'\n{name}={value}\n'
+          properties.write_text(text, encoding='utf-8')
+          local = ['jvm.toolchain.version=21', 'ani.enable.ios=false', 'ani.android.abis=all', 'kotlin.native.ignoreDisabledTargets=true']
+          for name, env in [('ani.dandanplay.app.id', 'DANDANPLAY_APP_ID'), ('ani.dandanplay.app.secret', 'DANDANPLAY_APP_SECRET')]:
+              if os.environ.get(env):
+                  local.append(f'{name}={os.environ[env]}')
+          Path('local.properties').write_text('\n'.join(local) + '\n', encoding='utf-8')
+          PY
+      - name: Build phone and TV release APKs
+        env:
+          signing_release_storePassword: ${{ secrets.SIGNING_RELEASE_STOREPASSWORD }}
+          signing_release_keyAlias: ${{ secrets.SIGNING_RELEASE_KEYALIAS }}
+          signing_release_keyPassword: ${{ secrets.SIGNING_RELEASE_KEYPASSWORD }}
+        run: ./gradlew :app:android:assembleDefaultRelease :app:android:assembleTvRelease --no-configuration-cache --stacktrace --console=plain
+      - name: Verify APK signatures and collect packages
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          for flavor in default tv; do
+            prefix=ani
+            if [ "$flavor" = tv ]; then prefix=ani-tv; fi
+            for abi in arm64-v8a armeabi-v7a x86_64 universal; do
+              apk="app/android/build/outputs/apk/$flavor/release/android-$flavor-$abi-release.apk"
+              "$apksigner" verify --verbose "$apk"
+              cp "$apk" "dist/$prefix-$APP_VERSION-$abi.apk"
+            done
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fork-release-android
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/android-release.keystore"
+
+  ios:
+    needs: prepare
+    name: Reuse published iOS IPA
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      IOS_RELEASE_TAG: ${{ inputs.ios_release_tag }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      APP_VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Download published iOS assets
+        run: |
+          set -euo pipefail
+          mkdir -p original-ios dist
+          gh release view "$IOS_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json body,assets,isDraft,isPrerelease,url > original-ios/release.json
+          gh release download "$IOS_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir original-ios \
+            --pattern '*.ipa' --pattern ios-release.json --pattern SHA256SUMS
+      - name: Verify IPA and preserve its source provenance
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import plistlib
+          import re
+          import shutil
+          import zipfile
+          from pathlib import Path
+
+          original = Path('original-ios')
+          release = json.loads((original / 'release.json').read_text())
+          if release['isDraft'] or release['isPrerelease']:
+              raise SystemExit('The iOS source must be a published stable release')
+          ipas = list(original.glob('*.ipa'))
+          if len(ipas) != 1:
+              raise SystemExit('Expected exactly one published IPA')
+          ipa = ipas[0]
+          digest = hashlib.sha256(ipa.read_bytes()).hexdigest()
+          checksums = {line.split(maxsplit=1)[1].lstrip('*'): line.split()[0]
+                       for line in (original / 'SHA256SUMS').read_text().splitlines() if line.strip()}
+          if checksums.get(ipa.name) != digest:
+              raise SystemExit('Published IPA checksum does not match')
+          version = os.environ['APP_VERSION'].split('-')[0]
+          with zipfile.ZipFile(ipa) as archive:
+              if archive.testzip() is not None:
+                  raise SystemExit('IPA ZIP integrity check failed')
+              info = plistlib.loads(archive.read('Payload/Animeko.app/Info.plist'))
+          if info['CFBundleIdentifier'] != 'org.animeko.animeko' or info['CFBundleShortVersionString'] != version:
+              raise SystemExit('Published IPA bundle or version does not match')
+          metadata = json.loads((original / 'ios-release.json').read_text())
+          if metadata['version'] != version or metadata['buildVersion'] != info['CFBundleVersion'] or metadata['size'] != ipa.stat().st_size:
+              raise SystemExit('Published iOS metadata does not match the IPA')
+          source = re.search(r'/commit/([0-9a-f]{40})', release['body'])
+          if not source:
+              raise SystemExit('The published iOS release must identify its application source commit')
+          provenance = {'sourceRelease': release['url'], 'sourceCommit': source.group(1),
+                        'originalDownloadURL': metadata['downloadURL'], 'sha256': digest,
+                        'version': version, 'buildVersion': info['CFBundleVersion']}
+          destination = f'Animeko-{version}.ipa'
+          shutil.copyfile(ipa, Path('dist') / destination)
+          metadata['downloadURL'] = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{os.environ['RELEASE_TAG']}/{destination}"
+          Path('dist/ios-release.json').write_text(json.dumps(metadata, indent=2) + '\n')
+          Path('dist/ios-provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fork-release-ios
+          path: dist/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  publish:
+    needs: [prepare, desktop, android, ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      APP_VERSION: ${{ needs.prepare.outputs.version }}
+      SOURCE_COMMIT: ${{ needs.prepare.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fork-release-*
+          path: dist
+          merge-multiple: true
+      - name: Verify complete release and write checksums
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          dist = Path('dist')
+          version = os.environ['APP_VERSION']
+          expected = [f'ani-{version}-{platform}.zip{suffix}'
+                      for platform in ('windows-x86_64', 'windows-aarch64', 'macos-x86_64', 'macos-aarch64', 'linux-x86_64')
+                      for suffix in ('', '.manifest.json')]
+          expected += [f'ani-{version}-macos-aarch64.dmg', f'ani-{version}-linux-x86_64.appimage', f'ani-{version}-linux-x86_64.appimage.zsync',
+                       f'Animeko-{version.split("-")[0]}.ipa', 'ios-release.json', 'ios-provenance.json']
+          expected += [f'{prefix}-{version}-{abi}.apk' for prefix in ('ani', 'ani-tv')
+                       for abi in ('arm64-v8a', 'armeabi-v7a', 'x86_64', 'universal')]
+          for name in expected:
+              if not (dist / name).is_file() or (dist / name).stat().st_size == 0:
+                  raise SystemExit(f'Missing release asset: {name}')
+          (dist / 'SHA256SUMS').write_text(''.join(f'{hashlib.sha256((dist / name).read_bytes()).hexdigest()}  {name}\n' for name in sorted(expected)))
+          run = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          ios = json.loads((dist / 'ios-provenance.json').read_text())
+          Path('release-notes.md').write_text(f"Animeko {version}\n\nAndroid and desktop source: `{os.environ['SOURCE_COMMIT']}`.\n\n"
+              f"iOS IPA reused from [{ios['version']} build {ios['buildVersion']}]({ios['sourceRelease']}), source `{ios['sourceCommit']}`.\n\n"
+              'Android phone and TV (arm64-v8a, armeabi-v7a, x86_64, universal); Windows x64/ARM64; '
+              'macOS Intel/Apple Silicon; Linux x64; iOS (ad-hoc signed for sideloading).\n\n'
+              f'[Build and package verification]({run}). File checksums: `SHA256SUMS`.\n')
+          PY
+      - name: Publish complete release
+        run: |
+          set -euo pipefail
+          remote=$(git ls-remote origin "refs/tags/$RELEASE_TAG" "refs/tags/$RELEASE_TAG^{}" | tail -1 | cut -f1)
+          if [ -n "$remote" ] && [ "$remote" != "$SOURCE_COMMIT" ]; then
+            echo 'Release tag points at another commit' >&2
+            exit 1
+          fi
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$SOURCE_COMMIT" \
+              --title "Animeko $APP_VERSION" --draft --notes-file release-notes.md
+          fi
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" dist/* --clobber
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false \
+            --latest --title "Animeko $APP_VERSION" --notes-file release-notes.md
+      - name: Update LiveContainer source
+        run: python3 .github/scripts/livecontainer_source.py --repository "$GITHUB_REPOSITORY" --publish

@@ -31,7 +31,28 @@ uv run --with pyyaml python .github/workflows/test_issue_classification.py
 uv run --with pyyaml python .github/workflows/test_qa_review.py
 ```
 
-## iOS Release 与 LiveContainer 源
+## Fork 多平台 Release
+
+`fork-release.yml` 直接维护，手动指定应用源码 `source_ref` 与版本标签 `release_tag`。
+发布分支的运行入口是已有的 `ios-livecontainer-release.yml`：选择发布分支，并填写非空的 `release_tag`，
+调用该分支的多平台工作流；`release_tag` 留空时构建独立 iOS IPA。
+Android 与桌面平台使用同一份固定 commit，已有标签必须指向该 commit；源码的基础版本必须与标签一致。
+包含 Android 手机与 TV（arm64-v8a、armeabi-v7a、x86_64、universal）、Windows x64/ARM64、
+macOS Intel/Apple Silicon、Linux x64，以及从 `ios_release_tag`（默认 `v4.9.1`）复用的已发布 iOS IPA。
+各平台先上传 Actions artifacts，全部成功且资产齐全后统一写入 GitHub Release，并更新 LiveContainer 源。
+资产包含桌面更新清单、AppImage zsync 与全平台 `SHA256SUMS`，不依赖 S3、自托管机器、Codex 或 App Store Connect。
+
+Android 必需 repository secrets：`SIGNING_RELEASE_STOREFILE`（密钥文件的 base64）、
+`SIGNING_RELEASE_STOREPASSWORD`、`SIGNING_RELEASE_KEYALIAS`、`SIGNING_RELEASE_KEYPASSWORD`。
+弹弹play 功能需要 `DANDANPLAY_APP_ID` 与 `DANDANPLAY_APP_SECRET`。
+密钥、密码与本地配置不属于仓库文件。
+
+iOS 资产复用要求来源为正式 Release，且包含一个 IPA、`ios-release.json` 与 `SHA256SUMS`。
+流程检查 IPA 校验和、ZIP 完整性、bundle ID、显示版本、构建号与文件大小。
+`ios-provenance.json` 记录原 Release、源码 commit、下载地址与 IPA 校验和；Release 说明分别列出两份源码。
+目标 Release 的 iOS 下载地址使用目标标签，IPA 内容与构建号保持来源版本。
+
+## iOS 独立 Release 与 LiveContainer 源
 
 `ios-livecontainer-release.yml` 直接维护，手动选择源分支或 commit（默认 `main`），通过上游 Gradle 任务构建 Release IPA，
 发布 `Animeko <版本号>`，资产名为 `Animeko-<版本号>.ipa`，应用名称为 `Animeko`、bundle ID 为 `org.animeko.animeko`。
