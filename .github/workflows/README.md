@@ -42,6 +42,7 @@ Android 与桌面平台使用同一份固定 commit，已有标签必须指向�
 macOS Intel/Apple Silicon、Linux x64，以及从 `ios_release_tag`（默认 `v4.9.1`）复用的已发布 iOS IPA。
 各平台先上传 Actions artifacts，全部成功且资产齐全后统一写入 GitHub Release，并更新 LiveContainer 源。
 资产包含桌面更新清单、AppImage zsync 与全平台 `SHA256SUMS`，不依赖 S3、自托管机器、Codex 或 App Store Connect。
+Linux AppImage 与 `.zsync` 在工作目录生成并一起收集到 `dist`；AppDir 为所有用户提供读取权限，并保留已有可执行位。
 
 Android 必需 repository secrets：`SIGNING_RELEASE_STOREFILE`（密钥文件的 base64）、
 `SIGNING_RELEASE_STOREPASSWORD`、`SIGNING_RELEASE_KEYALIAS`、`SIGNING_RELEASE_KEYPASSWORD`。

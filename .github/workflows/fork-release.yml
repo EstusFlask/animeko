@@ -199,9 +199,13 @@ jobs:
           cp app/desktop/appResources/linux-x64/{AppRun,animeko.desktop,icon.png} AppDir/
           chmod +x AppDir/AppRun AppDir/usr/bin/Ani
           test -x AppDir/usr/lib/runtime/lib/jcef_helper
+          chmod -R a+rX AppDir
           asset="ani-$APP_VERSION-linux-x86_64.appimage"
-          ARCH=x86_64 ./appimagetool -u "zsync|https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$asset.zsync" AppDir "dist/$asset"
-          sed -i "s|^URL:.*|URL: $asset|" "dist/$asset.zsync"
+          ARCH=x86_64 ./appimagetool -u "zsync|https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$asset.zsync" AppDir "$asset"
+          test -s "$asset"
+          test -s "$asset.zsync"
+          sed -i "s|^URL:.*|URL: $asset|" "$asset.zsync"
+          mv -- "$asset" "$asset.zsync" dist/
       - uses: actions/upload-artifact@v4
         with:
           name: fork-release-${{ matrix.platform }}
