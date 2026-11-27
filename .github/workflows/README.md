@@ -6,6 +6,9 @@
 也支持手动选择分支运行。Windows 的 x64、ARM64 产物由 `createReleaseDistributable` 生成，属于 Release 便携包；
 Android 的普通分支检查产物为 Debug APK。打包、测试检查和产物验证是不同步骤，上传产物不代表整个工作流通过。
 
+依赖准备步骤通过 `ci-helper/run-gradle-with-retry.py` 执行 Gradle。依赖仓库返回 HTTP 429 时等待 30、60 秒重试，
+编译、测试和其他错误直接保留原退出码；工作流中各步骤的外层重试策略独立生效。
+
 `pr-images.yml` 直接维护，拒绝 PR 在资源目录以外新增图片和视频，防止验证截图进入 git 历史。
 
 `datasource-test-mcp.yml` 直接维护，构建自带 JBR 的 `tools/datasource-test-mcp` Windows 发行包，不依赖仓库环境即可运行，用法见该工具的 README。

@@ -1064,6 +1064,10 @@ fun WorkflowBuilder.addConsistencyCheckJob(filename: String) {
         run(
             command = "pip3 install PyYAML",
         )
+        run(
+            name = "Test dependency download retries",
+            command = "python3 -B -m unittest discover -s ci-helper -p test_run_gradle_with_retry.py",
+        )
         val originalPath = """.github/workflows/$filename"""
         val backupPath = """.github/workflows/$filename-check.yml"""
         run(
@@ -1426,12 +1430,18 @@ class WithMatrix(
         timeoutMinutes: Int = 180,
         gradleArgs: String = matrix.gradleArgs,
         maxWorkers: Int? = null,
+        retryDependencyDownloads: Boolean = false,
     ) = runWithAttempts(
         name = name,
         `if` = `if`,
         timeoutMinutes = timeoutMinutes,
         command = buildString {
-            append("./gradlew ")
+            if (retryDependencyDownloads) {
+                append(if (matrix.isWindows) "python " else "python3 ")
+                append("ci-helper/run-gradle-with-retry.py ")
+            } else {
+                append("./gradlew ")
+            }
             tasks.joinTo(this, " ")
             append(' ')
             append(gradleArgs)
@@ -1760,6 +1770,7 @@ class WithMatrix(
         )
         runGradle(
             name = "Clean and download dependencies",
+            retryDependencyDownloads = true,
             tasks = arrayOf("--scan"),
             gradleArgs = matrix.gradleArgs.replace(
                 "--scan",
