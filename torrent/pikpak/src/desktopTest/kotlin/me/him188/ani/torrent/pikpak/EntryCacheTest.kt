@@ -103,11 +103,13 @@ class EntryCacheTest {
 
             val starts = source.requests.map { it.start }
             val tailStart = content.size - PikPakFileEntry.FOOTER_SIZE
+            val lastHead = starts.indexOfLast { it < PikPakFileEntry.HEADER_SIZE }
             val firstTail = starts.indexOfFirst { it >= tailStart }
             val firstMiddle = starts.indexOfFirst { it >= PikPakFileEntry.HEADER_SIZE && it < tailStart }
-            // Two workers start at once, so which of the first two requests is recorded first is a race
-            assertTrue(0L in starts.take(2), "the download did not start at the head: $starts")
+            // Workers within each range may reach the source in any order.
+            assertTrue(lastHead in 0 until firstTail, "the head came after the index: $starts")
             assertTrue(firstTail in 0 until firstMiddle, "the index came after the middle: $starts")
+            assertContentEquals(content, entryData(entry))
         } finally {
             entry.close()
         }

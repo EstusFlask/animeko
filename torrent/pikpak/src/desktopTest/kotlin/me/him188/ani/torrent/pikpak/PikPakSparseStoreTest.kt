@@ -9,9 +9,12 @@
 
 package me.him188.ani.torrent.pikpak
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import me.him188.ani.app.torrent.io.RandomAccessFile
 import me.him188.ani.utils.io.SystemPath
 import me.him188.ani.utils.io.SystemPaths
@@ -21,6 +24,8 @@ import me.him188.ani.utils.io.length
 import me.him188.ani.utils.io.resolve
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -29,6 +34,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * What the file cache relies on of the store: a block is held once written and never before, the
@@ -79,6 +85,50 @@ class PikPakSparseStoreTest {
             assertEquals(block + 100, store.heldBytes.value)
             assertFalse(store.isComplete)
         } finally {
+            store.close()
+        }
+    }
+
+    @Test
+    fun `a cancelled write still records bytes flushed to disk`() = runBlocking {
+        val file = SystemPaths.createTempDirectory("sparse-cancelled-write").resolve("ep.mkv")
+        val content = payload(block.toInt())
+        val flushed = CompletableDeferred<Unit>()
+        val finishWrite = CountDownLatch(1)
+        val held = CopyOnWriteArrayList<Int>()
+        val store = store(
+            file, content.size.toLong(), onHeld = { held += it },
+            openDataFile = {
+                val delegate = openRandomAccessDataFile(it)
+                object : DataFile by delegate {
+                    override fun flush() {
+                        delegate.flush()
+                        flushed.complete(Unit)
+                        check(finishWrite.await(10, TimeUnit.SECONDS)) { "the write was not released" }
+                    }
+                }
+            },
+        )
+        val writer = launch(Dispatchers.Default) { store.write("k", 0, content) }
+        try {
+            withTimeout(10.seconds) { flushed.await() }
+            writer.cancel()
+            finishWrite.countDown()
+            writer.join()
+            store.close()
+
+            assertEquals(listOf(0), held, "flushed bytes must be reported even when their caller is cancelled")
+            assertEquals(block, store.heldBytes.value)
+            val reopened = store(file, content.size.toLong())
+            try {
+                assertContentEquals(content, reopened.read("k", 0, content.size))
+            } finally {
+                reopened.close()
+            }
+        } finally {
+            finishWrite.countDown()
+            writer.cancel()
+            writer.join()
             store.close()
         }
     }

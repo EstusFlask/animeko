@@ -247,10 +247,15 @@ internal class PikPakFileEntry(
     private suspend fun downloadLoop() {
         while (!stream.store.isComplete) {
             var cache: PikPakFileCache? = null
+            var download: Deferred<Unit>? = null
             try {
                 ensureCloudReady()
                 cache = openCache()
-                cache.download(downloadOrder()).await()
+                // Each range finishes before the next enters the SDK's concurrent block queue.
+                for (range in downloadOrder()) {
+                    download = cache.download(listOf(range))
+                    download.await()
+                }
             } catch (e: CancellationException) {
                 // Our own cancellation ends the loop. Otherwise the cache was closed under the
                 // download, by an account switch or a delete, and the next pass opens the new one.
@@ -261,6 +266,9 @@ internal class PikPakFileEntry(
                 _error.value = e
                 logger.warn(e) { "[$torrentId] $fileName download stopped, retrying in $RETRY_DELAY" }
                 delay(RETRY_DELAY)
+            } finally {
+                // The SDK owns the deferred; pausing withdraws its outstanding requests.
+                download?.cancel()
             }
         }
         _error.value = null
@@ -375,16 +383,15 @@ internal class PikPakFileEntry(
     override val isStreamingRemotely: Boolean
         get() = meta.gcid.isNotEmpty() && !stream.store.isComplete
 
-    // What was only played goes with the session, as it did before playback went through the store;
-    // a kept file stays for the next session.
+    // What was only played goes with the session; a kept file stays for the next session.
     suspend fun close() {
         downloadWanted.value = false
         prefetchRange.value = null
         resolveMutex.withLock {
             cloud.release()
-            if (kept || !wroteThisSession) {
-                stream.close()
-            } else {
+            // Closing waits for in-flight disk writes to report what this session touched.
+            stream.close()
+            if (!kept && wroteThisSession) {
                 try {
                     stream.delete()
                 } catch (e: Throwable) {
