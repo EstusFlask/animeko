@@ -21,12 +21,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 @Composable
 fun ExternalSubtitleOverlay(controller: ExternalSubtitleController, modifier: Modifier = Modifier) {
@@ -34,7 +34,11 @@ fun ExternalSubtitleOverlay(controller: ExternalSubtitleController, modifier: Mo
     if (text.isEmpty()) return
     val safeArea = LocalSubtitleSafeArea.current
     val appearance = LocalSubtitleAppearance.current
+    val density = LocalDensity.current
     BoxWithConstraints(modifier.fillMaxSize()) {
+        // 与 mpv 的默认文本字幕一致，以播放器高度 720 时字号 38 为基准。
+        // 字幕相对画面的大小由字幕设置决定，界面字体缩放不参与视频内排版。
+        val fontSize = with(density) { (maxHeight * (38f / 720f) * appearance.effectiveFontScale).toSp() }
         val region = subtitleRegion(maxWidth.value.toDouble(), maxHeight.value.toDouble(), safeArea)
         Box(
             Modifier.offset(region.left.dp, region.top.dp).size(region.width.dp, region.height.dp).clipToBounds(),
@@ -47,7 +51,7 @@ fun ExternalSubtitleOverlay(controller: ExternalSubtitleController, modifier: Mo
                 maxLines = 6,
                 overflow = TextOverflow.Ellipsis,
                 style = TextStyle(
-                    fontSize = (22 * appearance.effectiveFontScale).sp,
+                    fontSize = fontSize,
                     shadow = Shadow(Color.Black, blurRadius = 4f),
                     textAlign = TextAlign.Center,
                 ),
