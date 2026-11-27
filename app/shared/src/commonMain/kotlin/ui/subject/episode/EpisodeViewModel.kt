@@ -61,6 +61,7 @@ import me.him188.ani.app.data.models.episode.displayName
 import me.him188.ani.app.data.models.episode.nameOrNameCn
 import me.him188.ani.app.data.models.episode.renderEpisodeEp
 import me.him188.ani.app.data.models.player.playProgressByEpisodeId
+import me.him188.ani.app.data.models.preference.SubtitleTextConversion
 import me.him188.ani.app.data.models.preference.VideoEnhancementDefaultMode
 import me.him188.ani.app.data.models.preference.VideoScaffoldConfig
 import me.him188.ani.app.data.models.preference.parseMpvOptions
@@ -145,6 +146,7 @@ import me.him188.ani.app.ui.subject.episode.analytics.PlayFlowMediaSelectorListe
 import me.him188.ani.app.ui.subject.episode.analytics.PlayFlowUserAction
 import me.him188.ani.app.ui.subject.episode.analytics.recordUserAction
 import me.him188.ani.app.videoplayer.subtitle.ExternalSubtitleController
+import me.him188.ani.app.videoplayer.subtitle.SubtitleAppearance
 import me.him188.ani.utils.analytics.Analytics
 import me.him188.ani.utils.analytics.AnalyticsEvent.Companion.EpisodeEnter
 import me.him188.ani.app.domain.settings.GetDanmakuRegexFilterListFlowUseCase
@@ -589,7 +591,13 @@ open class EpisodeViewModel(
     fun setSubtitleFontScale(scale: Float) {
         if (!scale.isFinite()) return
         launchInBackground {
-            settingsRepository.videoScaffoldConfig.update { copy(subtitleFontScale = scale.coerceIn(0.75f, 2f)) }
+            settingsRepository.videoScaffoldConfig.update { copy(subtitleFontScale = SubtitleAppearance(scale).effectiveFontScale) }
+        }
+    }
+
+    fun setSubtitleTextConversion(target: SubtitleTextConversion) {
+        launchInBackground {
+            settingsRepository.videoScaffoldConfig.update { copy(subtitleTextConversion = target) }
         }
     }
 

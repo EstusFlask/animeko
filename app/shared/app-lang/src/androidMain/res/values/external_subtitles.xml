@@ -30,4 +30,11 @@
     <string name="opensubtitles_languages_description">Comma-separated language codes, e.g. zh-cn,zh-tw,en,ja. Leave blank for all languages.</string>
     <string name="external_subtitle_offset">Offset: %1$ss</string>
     <string name="external_subtitle_disabled">OpenSubtitles is disabled in Settings.</string>
+    <string name="video_player_subtitle_font_size_input">Font size</string>
+    <string name="video_player_subtitle_font_size_hint">12–114; scales with the video</string>
+    <string name="video_player_subtitle_conversion">Text conversion</string>
+    <string name="video_player_subtitle_original">Keep original</string>
+    <string name="video_player_subtitle_simplified">Simplified Chinese</string>
+    <string name="video_player_subtitle_traditional">Traditional Chinese</string>
+    <string name="video_player_subtitle_conversion_description">Applies to the selected text subtitle. Image subtitles keep their original appearance.</string>
 </resources>

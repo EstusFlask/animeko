@@ -40,8 +40,8 @@ class IosSubtitleOverlayTest {
         val small = overlay.label.font.pointSize
         overlay.update("第一行\nSecond line", SubtitleAppearance(2f), SubtitleSafeArea())
         overlay.layoutIfNeeded()
-        assertEquals(16.5, small)
-        assertEquals(44.0, overlay.label.font.pointSize)
+        assertEquals(23.75, small, 0.01)
+        assertEquals(600.0 * 38 / 720 * 2, overlay.label.font.pointSize, 0.01)
         assertEquals("第一行\nSecond line", overlay.label.text)
     }
 

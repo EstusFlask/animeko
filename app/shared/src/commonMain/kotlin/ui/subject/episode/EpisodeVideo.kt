@@ -69,6 +69,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import me.him188.ani.app.data.models.preference.DarkMode
+import me.him188.ani.app.data.models.preference.SubtitleTextConversion
 import me.him188.ani.app.data.models.preference.VideoScaffoldConfig
 import me.him188.ani.app.domain.media.cache.engine.MediaCacheEngineKey
 import me.him188.ani.app.domain.media.player.ChunkState
@@ -138,6 +139,7 @@ import me.him188.ani.app.ui.watchtogether.LocalWatchTogetherPlayerController
 import me.him188.ani.app.videoplayer.subtitle.ExternalSubtitleController
 import me.him188.ani.app.videoplayer.subtitle.ExternalSubtitleOverlay
 import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleAppearance
+import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleTextConversion
 import me.him188.ani.app.videoplayer.subtitle.SubtitleAppearance
 import me.him188.ani.app.videoplayer.ui.ControllerVisibility
 import me.him188.ani.app.videoplayer.ui.MutablePlayerFullscreenState
@@ -228,6 +230,8 @@ internal fun EpisodeVideoImpl(
     onClickNextEpisode: () -> Unit,
     playerControllerState: PlayerControllerState,
     opEdSkipDuration: Duration = DEFAULT_OP_ED_SKIP_DURATION,
+    subtitleTextConversion: SubtitleTextConversion = SubtitleTextConversion.ORIGINAL,
+    onSubtitleTextConversionChange: (SubtitleTextConversion) -> Unit = {},
     subtitleFontScale: Float = 1f,
     onSubtitleFontScaleChange: ((Float) -> Unit)? = null,
     externalSubtitles: ExternalSubtitleController? = null,
@@ -320,6 +324,8 @@ internal fun EpisodeVideoImpl(
         val topBarActions: @Composable RowScope.() -> Unit = {
             EpisodeVideoTopBarActions(
                 playerState = playerState,
+                subtitleTextConversion = subtitleTextConversion,
+                onSubtitleTextConversionChange = onSubtitleTextConversionChange,
                 subtitleFontScale = subtitleFontScale,
                 onSubtitleFontScaleChange = onSubtitleFontScaleChange,
                 onOpenExternalSubtitles = onOpenExternalSubtitles,
@@ -382,7 +388,10 @@ internal fun EpisodeVideoImpl(
                 if (LocalIsPreviewing.current) {
                     Text(previewModeText)
                 } else {
-                    CompositionLocalProvider(LocalSubtitleAppearance provides SubtitleAppearance(subtitleFontScale)) {
+                    CompositionLocalProvider(
+                        LocalSubtitleAppearance provides SubtitleAppearance(subtitleFontScale),
+                        LocalSubtitleTextConversion provides subtitleTextConversion,
+                    ) {
                         VideoPlayer(
                             playerState,
                             Modifier
@@ -701,6 +710,8 @@ private fun rememberPlayerTouchSeekState(
 @Composable
 internal fun EpisodeVideoTopBarActions(
     playerState: MediampPlayer,
+    subtitleTextConversion: SubtitleTextConversion = SubtitleTextConversion.ORIGINAL,
+    onSubtitleTextConversionChange: (SubtitleTextConversion) -> Unit = {},
     subtitleFontScale: Float,
     onSubtitleFontScaleChange: ((Float) -> Unit)?,
     expanded: Boolean,
@@ -947,7 +958,12 @@ internal fun EpisodeVideoTopBarActions(
     }
 
     if (showSubtitleSettings && onSubtitleFontScaleChange != null) {
-        SubtitleSettingsDialog(subtitleFontScale, onSubtitleFontScaleChange, onDismissRequest = { showSubtitleSettings = false })
+        SubtitleSettingsDialog(
+            subtitleFontScale, onSubtitleFontScaleChange,
+            onDismissRequest = { showSubtitleSettings = false },
+            textConversion = subtitleTextConversion,
+            onTextConversionChange = onSubtitleTextConversionChange,
+        )
     }
 
     if (expanded && LocalPlatform.current.isDesktop()) {

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,19 +21,65 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import me.him188.ani.app.data.models.preference.SubtitleTextConversion
 import me.him188.ani.app.ui.framework.AniComposeUiTest
 import me.him188.ani.app.ui.framework.runAniComposeUiTest
+import org.openani.mediamp.metadata.SubtitleTrack
 import org.openani.mediamp.source.UriMediaData
 import org.openani.mediamp.test.TestMediampPlayer
 
 class ExternalSubtitleOverlayTest {
+    @Test
+    fun `selected local and online subtitles convert from their originals and respect off and seek`() = runAniComposeUiTest {
+        var conversion by mutableStateOf(SubtitleTextConversion.ORIGINAL)
+        lateinit var controller: ExternalSubtitleController
+        lateinit var player: TestMediampPlayer
+        var candidates = emptyList<SubtitleTrack>()
+        setContent {
+            val scope = rememberCoroutineScope()
+            player = remember { TestMediampPlayer(scope.coroutineContext) }
+            controller = remember { ExternalSubtitleController(player, scope) }
+            val tracks by controller.tracks.candidates.collectAsState(emptyList())
+            candidates = tracks
+            LaunchedEffect(Unit) {
+                val media = UriMediaData("https://test/video.mp4")
+                player.setMediaData(media)
+                controller.select("local.srt", "1\n00:00:00,000 --> 00:00:03,000\n软件與網絡".encodeToByteArray(), media)
+                controller.select("online.srt", "1\n00:00:00,000 --> 00:00:03,000\n汉语和漢語".encodeToByteArray(), media)
+                player.injectPosition(1000)
+            }
+            CompositionLocalProvider(LocalSubtitleTextConversion provides conversion) {
+                Box(Modifier.requiredSize(320.dp, 180.dp)) { ExternalSubtitleOverlay(controller) }
+            }
+        }
+        waitUntil { onAllNodesWithTag("ExternalSubtitleText").fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("汉语和漢語").fetchSemanticsNode()
+        runOnIdle { conversion = SubtitleTextConversion.TRADITIONAL }
+        waitUntil { onAllNodesWithText("漢語和漢語").fetchSemanticsNodes().isNotEmpty() }
+        runOnIdle { conversion = SubtitleTextConversion.SIMPLIFIED }
+        waitUntil { onAllNodesWithText("汉语和汉语").fetchSemanticsNodes().isNotEmpty() }
+        runOnIdle { controller.tracks.select(null) }
+        onNodeWithTag("ExternalSubtitleText").assertDoesNotExist()
+        waitUntil { candidates.size == 2 }
+        runOnIdle { controller.tracks.select(candidates.first()) }
+        waitUntil { onAllNodesWithText("软件与网络").fetchSemanticsNodes().isNotEmpty() }
+        runOnIdle { conversion = SubtitleTextConversion.ORIGINAL }
+        onNodeWithText("软件與網絡").fetchSemanticsNode()
+        runOnIdle { player.injectPosition(5000) }
+        onNodeWithTag("ExternalSubtitleText").assertDoesNotExist()
+        runOnIdle { player.injectPosition(1000) }
+        onNodeWithText("软件與網絡").fetchSemanticsNode()
+    }
+
     @Test
     fun `external subtitles scale with the player while controls preserve their size`() = runAniComposeUiTest {
         var height by mutableStateOf(360f)

@@ -1169,6 +1169,8 @@ private fun EpisodeVideo(
         onClickNextEpisode = { vm.episodeSelectorState.selectNext() },
         playerControllerState = playerControllerState,
         opEdSkipDuration = vm.videoScaffoldConfig.opEdSkipDuration,
+        subtitleTextConversion = vm.videoScaffoldConfig.subtitleTextConversion,
+        onSubtitleTextConversionChange = vm::setSubtitleTextConversion,
         subtitleFontScale = vm.videoScaffoldConfig.subtitleFontScale,
         onSubtitleFontScaleChange = vm::setSubtitleFontScale,
         externalSubtitles = vm.externalSubtitles,

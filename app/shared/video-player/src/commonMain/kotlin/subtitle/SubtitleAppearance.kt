@@ -7,12 +7,21 @@
 package me.him188.ani.app.videoplayer.subtitle
 
 import androidx.compose.runtime.compositionLocalOf
+import me.him188.ani.app.data.models.preference.SubtitleTextConversion
 
 data class SubtitleAppearance(val fontScale: Float = 1f) {
-    val effectiveFontScale: Float get() = if (fontScale.isFinite()) fontScale.coerceIn(0.75f, 2f) else 1f
+    val effectiveFontScale: Float get() = if (fontScale.isFinite()) fontScale.coerceIn(MinFontSize / DefaultFontSize, MaxFontSize / DefaultFontSize) else 1f
+    val fontSize: Float get() = DefaultFontSize * effectiveFontScale
+
+    companion object {
+        const val DefaultFontSize = 38f
+        const val MinFontSize = 12f
+        const val MaxFontSize = 114f
+    }
 }
 
 val LocalSubtitleAppearance = compositionLocalOf { SubtitleAppearance() }
+val LocalSubtitleTextConversion = compositionLocalOf { SubtitleTextConversion.ORIGINAL }
 
 /** 以逻辑像素表示视频边缘被系统栏和播放器控制栏占用的空间。 */
 internal data class SubtitleSafeArea(

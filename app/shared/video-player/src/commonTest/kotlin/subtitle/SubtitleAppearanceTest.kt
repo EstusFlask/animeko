@@ -13,8 +13,8 @@ import kotlin.test.assertTrue
 class SubtitleAppearanceTest {
     @Test
     fun `font scales are bounded and invalid values use the default`() {
-        assertEquals(0.75f, SubtitleAppearance(-1f).effectiveFontScale)
-        assertEquals(2f, SubtitleAppearance(99f).effectiveFontScale)
+        assertEquals(SubtitleAppearance.MinFontSize, SubtitleAppearance(-1f).fontSize)
+        assertEquals(SubtitleAppearance.MaxFontSize, SubtitleAppearance(99f).fontSize)
         for (value in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
             assertEquals(1f, SubtitleAppearance(value).effectiveFontScale)
         }

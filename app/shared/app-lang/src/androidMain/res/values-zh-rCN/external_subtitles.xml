@@ -30,4 +30,11 @@
     <string name="opensubtitles_languages_description">使用逗号分隔语言代码，例如 zh-cn,zh-tw,en,ja；留空搜索所有语言</string>
     <string name="external_subtitle_offset">偏移：%1$ss</string>
     <string name="external_subtitle_disabled">OpenSubtitles 已在设置中关闭</string>
+    <string name="video_player_subtitle_font_size_input">字号</string>
+    <string name="video_player_subtitle_font_size_hint">12–114，随画面大小缩放</string>
+    <string name="video_player_subtitle_conversion">简繁转换</string>
+    <string name="video_player_subtitle_original">保留原样</string>
+    <string name="video_player_subtitle_simplified">转为简体</string>
+    <string name="video_player_subtitle_traditional">转为繁体</string>
+    <string name="video_player_subtitle_conversion_description">对当前选择的文本字幕生效，图片字幕保持原样。</string>
 </resources>

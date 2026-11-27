@@ -8,6 +8,7 @@
 
 package me.him188.ani.app.videoplayer.ui
 
+import kotlin.math.floor
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import me.him188.ani.app.videoplayer.subtitle.SubtitleAppearance
@@ -21,7 +22,6 @@ import platform.UIKit.UIColor
 import platform.UIKit.UIFont
 import platform.UIKit.UILabel
 import platform.UIKit.UIView
-import kotlin.math.floor
 
 /** 单个多行文本层统一排版所有当前对白，尺寸受可见视频和控制栏边界约束。 */
 internal class IosSubtitleOverlay : UIView(CGRectMake(0.0, 0.0, 0.0, 0.0)) {
@@ -54,11 +54,12 @@ internal class IosSubtitleOverlay : UIView(CGRectMake(0.0, 0.0, 0.0, 0.0)) {
 
     override fun layoutSubviews() {
         super.layoutSubviews()
+        val height = bounds.useContents { size.height }
         val region = bounds.useContents { subtitleRegion(size.width, size.height, safeArea) }
         label.hidden = label.text.isNullOrEmpty() || region.width <= 0 || region.height <= 0
         if (label.hidden) return
         label.numberOfLines = 0
-        val requestedSize = 22.0 * appearance.effectiveFontScale
+        val requestedSize = height * SubtitleAppearance.DefaultFontSize / 720.0 * appearance.effectiveFontScale
         var fontSize = requestedSize
         label.font = UIFont.systemFontOfSize(fontSize)
         while (fontSize > minOf(12.0, requestedSize) && measuredHeight(region.width) > region.height) {

@@ -13,20 +13,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.UIKitView
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
+import me.him188.ani.app.data.models.preference.SubtitleTextConversion
 import me.him188.ani.app.platform.SwiftBridge
 import me.him188.ani.app.videoplayer.player.AniAVKitMediampPlayer
 import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleAppearance
 import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleSafeArea
+import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleTextConversion
+import me.him188.ani.app.videoplayer.subtitle.rememberConvertedSubtitleText
 import org.openani.mediamp.MediampPlayer
 import org.openani.mediamp.features.AspectRatioMode
 import org.openani.mediamp.features.VideoAspectRatio
+import org.openani.mediamp.features.subtitleTracks
 import platform.AVFoundation.AVPlayerLayer
 import platform.UIKit.NSLayoutConstraint
 
@@ -46,6 +52,14 @@ actual fun VideoPlayer(
 
     val avPlayer = player.impl
     val subtitleText by player.subtitleText.collectAsState()
+    val selectedSubtitle by checkNotNull(player.subtitleTracks).selected.collectAsState()
+    var nativeText by remember(player) { mutableStateOf("") }
+    val capture = LocalSubtitleTextConversion.current != SubtitleTextConversion.ORIGINAL
+    val displayedText = rememberConvertedSubtitleText(when {
+        selectedSubtitle == null -> ""
+        selectedSubtitle?.id?.startsWith("file:") == true -> subtitleText
+        else -> nativeText
+    })
     val subtitleAppearance = LocalSubtitleAppearance.current
     val subtitleSafeArea = LocalSubtitleSafeArea.current
     val subtitleOverlay = remember(player) { IosSubtitleOverlay() }
@@ -76,7 +90,8 @@ actual fun VideoPlayer(
             },
             modifier = modifier,
             update = { view ->
-                subtitleOverlay.update(subtitleText, subtitleAppearance, subtitleSafeArea)
+                SwiftBridge.setPlayerSubtitleCapture(view, capture) { nativeText = it }
+                subtitleOverlay.update(displayedText, subtitleAppearance, subtitleSafeArea)
                 nativeSubtitleStyle.update(subtitleAppearance, subtitleSafeArea, view.bounds.useContents { size.height })
                 SwiftBridge.updateEnhancedPlayerView(
                     view,

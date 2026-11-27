@@ -9,13 +9,20 @@
 
 package me.him188.ani.app.data.models.preference
 
-import me.him188.ani.app.data.persistent.DataStoreJson
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.time.Duration.Companion.seconds
+import me.him188.ani.app.data.persistent.DataStoreJson
 
 class VideoScaffoldConfigTest {
+    @Test
+    fun `subtitle conversion defaults to original and persists independently of font size`() {
+        assertEquals(SubtitleTextConversion.ORIGINAL, DataStoreJson.decodeFromString(VideoScaffoldConfig.serializer(), "{}").subtitleTextConversion)
+        val config = VideoScaffoldConfig.Default.copy(subtitleTextConversion = SubtitleTextConversion.TRADITIONAL, subtitleFontScale = 0.5f)
+        assertEquals(config, DataStoreJson.decodeFromString(VideoScaffoldConfig.serializer(), DataStoreJson.encodeToString(VideoScaffoldConfig.serializer(), config)))
+    }
+
     @Test
     fun `subtitle size defaults to normal and survives settings serialization`() {
         assertEquals(1f, DataStoreJson.decodeFromString(VideoScaffoldConfig.serializer(), "{}").subtitleFontScale)
