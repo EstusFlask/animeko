@@ -34,6 +34,9 @@ import kotlinx.io.readByteArray
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -49,8 +52,20 @@ class OpenSubtitlesException(val status: Int) : Exception("OpenSubtitles HTTP $s
 /** API 凭据仅发送到 OpenSubtitles API；临时文件请求不携带 API Key 或用户令牌。 */
 class OpenSubtitlesClient(private val baseClient: HttpClient, private val settings: OpenSubtitlesSettings) {
     suspend fun search(query: String, episode: Int? = null, season: Int? = null, page: Int = 1): OpenSubtitlePage = withClient { client ->
-        require(settings.isConfigured) { "OpenSubtitles is not configured" }
+        require(settings.enabled) { "OpenSubtitles is disabled" }
         require(query.isNotBlank() && page > 0)
+        if (settings.apiKey.isBlank()) {
+            val response = client.callOfficialService("search_subtitles", buildJsonObject {
+                put("query", query.trim())
+                put("page", page)
+                put("per_page", 50)
+                episode?.let { put("episode_number", it) }
+                season?.let { put("season_number", it) }
+                val languages = normalizeOpenSubtitlesLanguages(settings.languages)
+                if (languages.isNotEmpty()) put("languages", buildJsonArray { languages.split(',').forEach { add(it) } })
+            })
+            return@withClient parsePage(response, "results", page)
+        }
         val url = URLBuilder("$API/subtitles").apply {
             // 参数和语言排序可避免 API 为规范化地址返回重定向。
             episode?.let { parameters.append("episode_number", it.toString()) }
@@ -61,8 +76,13 @@ class OpenSubtitlesClient(private val baseClient: HttpClient, private val settin
             season?.let { parameters.append("season_number", it.toString()) }
         }.build()
         val response = client.searchResponse(url)
-        val files = (response["data"] as? JsonArray).orEmpty().flatMap { item ->
-            val attributes = (item as? JsonObject)?.get("attributes") as? JsonObject ?: return@flatMap emptyList()
+        parsePage(response, "data", page)
+    }
+
+    private fun parsePage(response: JsonObject, field: String, page: Int): OpenSubtitlePage {
+        val files = (response[field] as? JsonArray).orEmpty().flatMap { item ->
+            val obj = item as? JsonObject ?: return@flatMap emptyList()
+            val attributes = if (field == "data") obj["attributes"] as? JsonObject ?: return@flatMap emptyList() else obj
             (attributes["files"] as? JsonArray).orEmpty().mapNotNull { raw ->
                 val file = raw as? JsonObject ?: return@mapNotNull null
                 val id = file["file_id"]?.jsonPrimitive?.intOrNull?.takeIf { it > 0 } ?: return@mapNotNull null
@@ -74,7 +94,7 @@ class OpenSubtitlesClient(private val baseClient: HttpClient, private val settin
                 )
             }
         }.distinctBy { it.id }
-        OpenSubtitlePage(files, page, (response["total_pages"]?.jsonPrimitive?.intOrNull ?: page).coerceAtLeast(page))
+        return OpenSubtitlePage(files, page, (response["total_pages"]?.jsonPrimitive?.intOrNull ?: page).coerceAtLeast(page))
     }
 
     /** 用户确认某个文件后才申请下载链接，此操作消耗服务端下载配额。 */
@@ -83,10 +103,18 @@ class OpenSubtitlesClient(private val baseClient: HttpClient, private val settin
     }
 
     private suspend fun download(client: HttpClient, file: OpenSubtitleFile): ByteArray {
-        require(settings.isConfigured) { "OpenSubtitles is not configured" }
+        if (!settings.isConfigured) throw OpenSubtitlesException(401)
+        if (settings.apiKey.isBlank()) {
+            val result = client.callOfficialService("download_subtitle", buildJsonObject {
+                put("file_id", file.id)
+                put("sub_format", "srt")
+                put("delivery", "link")
+            }, authenticate = true)
+            return client.downloadFile(Url(result.text("link")))
+        }
         var api = API
         var token: String? = null
-        if (settings.username.isNotBlank() && settings.password.isNotEmpty()) {
+        if (settings.hasAccount) {
             val login = client.post("$API/login") {
                 credentials()
                 contentType(ContentType.Application.Json)
@@ -108,6 +136,44 @@ class OpenSubtitlesClient(private val baseClient: HttpClient, private val settin
             setBody(buildJsonObject { put("file_id", file.id); put("sub_format", "srt") }.toString())
         }.readObject().text("link")
         return client.downloadFile(Url(link))
+    }
+
+    /** 官方服务提供匿名搜索，并用用户账号的下载额度签发字幕链接。 */
+    private suspend fun HttpClient.callOfficialService(
+        tool: String,
+        arguments: JsonObject,
+        authenticate: Boolean = false,
+    ): JsonObject {
+        val response = post("https://mcp.opensubtitles.com/mcp") {
+            timeout { requestTimeoutMillis = 60_000 }
+            contentType(ContentType.Application.Json)
+            header(HttpHeaders.Accept, "application/json, text/event-stream")
+            header(HttpHeaders.UserAgent, "Animeko v1")
+            header("MCP-Protocol-Version", "2025-03-26")
+            if (authenticate) {
+                header("X-OpenSubtitles-Username", settings.username.trim())
+                header("X-OpenSubtitles-Password", settings.password)
+            }
+            setBody(buildJsonObject {
+                put("jsonrpc", "2.0")
+                put("id", 1)
+                put("method", "tools/call")
+                put("params", buildJsonObject { put("name", tool); put("arguments", arguments) })
+            }.toString())
+        }
+        if (response.status.value !in 200..299) throw OpenSubtitlesException(response.status.value)
+        val body = response.bodyAsText()
+        val data = if (body.trimStart().startsWith('{')) body else {
+            body.lineSequence().filter { it.startsWith("data:") }.map { it.removePrefix("data:").trim() }
+                .firstOrNull { it.startsWith('{') } ?: throw OpenSubtitlesException(502)
+        }
+        val envelope = Json.parseToJsonElement(data) as? JsonObject ?: throw OpenSubtitlesException(502)
+        val result = envelope["result"] as? JsonObject ?: throw OpenSubtitlesException(502)
+        if (result["isError"]?.jsonPrimitive?.booleanOrNull == true) {
+            val status = Regex("""\b(401|403|406|429)\b""").find(result.toString())?.value?.toInt() ?: 502
+            throw OpenSubtitlesException(status)
+        }
+        return result["structuredContent"] as? JsonObject ?: throw OpenSubtitlesException(502)
     }
 
     private suspend fun HttpClient.searchResponse(initialUrl: Url): JsonObject {

@@ -18,7 +18,8 @@ data class OpenSubtitlesSettings(
     val password: String = "",
     val languages: String = "zh-cn,zh-tw,en,ja",
 ) {
-    val isConfigured: Boolean get() = enabled && apiKey.isNotBlank()
+    val hasAccount: Boolean get() = username.isNotBlank() && password.isNotEmpty()
+    val isConfigured: Boolean get() = enabled && (apiKey.isNotBlank() || hasAccount)
 
     override fun toString(): String = "OpenSubtitlesSettings(enabled=$enabled, configured=$isConfigured)"
 

@@ -4,6 +4,8 @@
  * https://github.com/open-ani/ani/blob/main/LICENSE
  */
 
+@file:OptIn(InternalMediampApi::class, InternalForInheritanceMediampApi::class)
+
 package me.him188.ani.app.videoplayer.subtitle
 
 import kotlin.test.Test
@@ -11,12 +13,63 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.openani.mediamp.InternalForInheritanceMediampApi
+import org.openani.mediamp.InternalMediampApi
+import org.openani.mediamp.MediampPlayer
+import org.openani.mediamp.features.MediaMetadata
+import org.openani.mediamp.features.buildPlayerFeatures
+import org.openani.mediamp.metadata.SubtitleTrack
+import org.openani.mediamp.metadata.TrackGroup
 import org.openani.mediamp.source.UriMediaData
 import org.openani.mediamp.test.TestMediampPlayer
 
 class ExternalSubtitleControllerTest {
+    @Test
+    fun `embedded and imported tracks share exclusive selection without discarding imported files`() = runTest {
+        val native = SubtitleTrack("embedded", "embedded", "en", emptyList())
+        val nativeGroup = object : TrackGroup<SubtitleTrack> {
+            override val selected = MutableStateFlow<SubtitleTrack?>(native)
+            override val candidates = MutableStateFlow(listOf(native))
+            override fun select(track: SubtitleTrack?): Boolean {
+                if (track != null && track != native) return false
+                selected.value = track
+                return true
+            }
+        }
+        val delegate = TestMediampPlayer(backgroundScope.coroutineContext)
+        val player = object : MediampPlayer by delegate {
+            override val features = buildPlayerFeatures {
+                add(MediaMetadata, object : MediaMetadata {
+                    override val subtitleTracks = nativeGroup
+                    override val audioTracks = null
+                    override val chapters = null
+                })
+            }
+        }
+        val controller = ExternalSubtitleController(player, backgroundScope)
+        val media = UriMediaData("https://test/video.mp4")
+        player.setMediaData(media)
+        runCurrent()
+        controller.select("local.srt", caption.encodeToByteArray(), media)
+        runCurrent()
+        assertNull(nativeGroup.selected.value)
+        val external = controller.tracks.candidates.first().last()
+        assertEquals(listOf(native, external), controller.tracks.candidates.first())
+        assertTrue(controller.tracks.select(native))
+        runCurrent()
+        assertNull(controller.selected.value)
+        assertEquals(native, controller.tracks.selected.value)
+        assertTrue(controller.tracks.select(external))
+        runCurrent()
+        assertNull(nativeGroup.selected.value)
+        assertEquals(external, controller.tracks.selected.value)
+        player.close()
+    }
+
     @Test
     fun `external captions follow seeks and delay and are cleared on media changes`() = runTest {
         val player = TestMediampPlayer(backgroundScope.coroutineContext)
@@ -26,6 +79,14 @@ class ExternalSubtitleControllerTest {
         runCurrent()
         assertTrue(controller.select("test.srt", caption.encodeToByteArray(), first))
         player.injectPosition(1500)
+        runCurrent()
+        assertEquals("Hello", controller.text.value)
+        val importedTrack = controller.tracks.candidates.first().single()
+        assertTrue(controller.tracks.select(null))
+        runCurrent()
+        assertNull(controller.selected.value)
+        assertEquals(listOf(importedTrack), controller.tracks.candidates.first())
+        assertTrue(controller.tracks.select(importedTrack))
         runCurrent()
         assertEquals("Hello", controller.text.value)
         controller.offsetMillis.value = 1000
@@ -41,6 +102,8 @@ class ExternalSubtitleControllerTest {
         runCurrent()
         assertNull(controller.selected.value)
         assertEquals(0L, controller.offsetMillis.value)
+        assertEquals(emptyList(), controller.tracks.candidates.first())
+        assertFalse(controller.tracks.select(importedTrack))
         assertFalse(controller.select("stale.srt", caption.encodeToByteArray(), first))
         player.close()
     }

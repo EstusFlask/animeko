@@ -4,45 +4,93 @@
  * https://github.com/open-ani/ani/blob/main/LICENSE
  */
 
+@file:OptIn(InternalMediampApi::class, InternalForInheritanceMediampApi::class)
+
 package me.him188.ani.app.videoplayer.subtitle
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.openani.mediamp.InternalForInheritanceMediampApi
+import org.openani.mediamp.InternalMediampApi
 import org.openani.mediamp.MediampPlayer
 import org.openani.mediamp.features.subtitleTracks
+import org.openani.mediamp.metadata.SubtitleTrack
+import org.openani.mediamp.metadata.TrackGroup
+import org.openani.mediamp.metadata.TrackLabel
 import org.openani.mediamp.source.MediaData
 
-data class ExternalSubtitle(val name: String, val timeline: SubtitleCueTimeline, internal val media: MediaData)
+data class ExternalSubtitle(
+    val name: String,
+    val timeline: SubtitleCueTimeline,
+    internal val media: MediaData,
+    val track: SubtitleTrack,
+)
 
 /** 外挂文本字幕按媒体会话隔离，播放器的位置流同时驱动播放、暂停与 seek 后的对白。 */
 class ExternalSubtitleController(private val player: MediampPlayer, scope: CoroutineScope) {
+    private val mainScope = CoroutineScope(scope.coroutineContext + player.mainDispatcher)
+    private val nativeTracks = player.subtitleTracks
+    private val nativeCandidates = (nativeTracks?.candidates ?: flowOf(emptyList()))
+        .stateIn(mainScope, SharingStarted.Eagerly, emptyList())
+    private val imported = MutableStateFlow<List<ExternalSubtitle>>(emptyList())
+    private var nextId = 0L
     private val _selected = MutableStateFlow<ExternalSubtitle?>(null)
     val selected = _selected.asStateFlow()
     val offsetMillis = MutableStateFlow(0L)
     private val _text = MutableStateFlow("")
     val text = _text.asStateFlow()
 
+    /** 内封轨道和本次媒体导入的字幕共用选择、关闭与再次开启入口。 */
+    val tracks: TrackGroup<SubtitleTrack> = object : TrackGroup<SubtitleTrack> {
+        override val candidates = combine(nativeCandidates, imported) { native, external ->
+            native + external.map { it.track }
+        }
+        override val selected = combine(nativeTracks?.selected ?: flowOf(null), this@ExternalSubtitleController.selected) { native, external ->
+            external?.track ?: native
+        }.stateIn(mainScope, SharingStarted.Eagerly, nativeTracks?.selected?.value)
+
+        override fun select(track: SubtitleTrack?): Boolean {
+            val external = track?.let { candidate -> imported.value.find { it.track.id == candidate.id } }
+            if (external != null) {
+                if (external.media !== player.mediaData.value) return false
+                nativeTracks?.select(null)
+                _selected.value = external
+                return true
+            }
+            if (track?.id?.startsWith("ani-external-") == true) return false
+            if (track != null && nativeTracks?.select(track) != true) return false
+            if (track == null) nativeTracks?.select(null)
+            clear()
+            return true
+        }
+    }
+
     init {
         scope.launch(player.mainDispatcher) {
             player.mediaData.collectLatest { current ->
-                if (_selected.value?.media !== current) {
+                if (imported.value.any { it.media !== current }) {
+                    imported.value = emptyList()
                     clear()
+                    offsetMillis.value = 0
                 }
             }
         }
         combine(player.currentPositionMillis, selected, offsetMillis, player.mediaData) { position, subtitle, offset, current ->
             if (current === subtitle?.media) subtitle?.timeline?.textAt(position - offset).orEmpty() else ""
         }.distinctUntilChanged().onEach { _text.value = it }
-            .launchIn(CoroutineScope(scope.coroutineContext + player.mainDispatcher))
+            .launchIn(mainScope)
         scope.launch(player.mainDispatcher) {
             player.subtitleTracks?.selected?.collect { if (it != null) clear() }
         }
@@ -55,16 +103,21 @@ class ExternalSubtitleController(private val player: MediampPlayer, scope: Corou
         require(cues.isNotEmpty()) { "No readable subtitle cues" }
         return withContext(player.mainDispatcher) {
             if (player.mediaData.value !== expectedMedia) return@withContext false
-            player.subtitleTracks?.select(null)
+            nativeTracks?.select(null)
             offsetMillis.value = 0
-            _selected.value = ExternalSubtitle(name, SubtitleCueTimeline(cues), expectedMedia)
+            val id = "ani-external-${nextId++}"
+            val subtitle = ExternalSubtitle(
+                name, SubtitleCueTimeline(cues), expectedMedia,
+                SubtitleTrack(id, id, null, listOf(TrackLabel(null, name))),
+            )
+            imported.value = imported.value.filterNot { it.name == name } + subtitle
+            _selected.value = subtitle
             true
         }
     }
 
     fun clear() {
         _selected.value = null
-        offsetMillis.value = 0
         _text.value = ""
     }
 }

@@ -32,13 +32,64 @@ import me.him188.ani.app.data.models.preference.OpenSubtitlesSettings
 
 class OpenSubtitlesClientTest {
     @Test
-    fun `empty default key never sends requests and secrets are not in diagnostic strings`() = runTest {
+    fun `anonymous search uses the official service without an API key or account credentials`() = runTest {
+        val client = mockClient { request ->
+            assertEquals("mcp.opensubtitles.com", request.url.host)
+            assertNull(request.headers["Api-Key"])
+            assertNull(request.headers["X-OpenSubtitles-Username"])
+            assertNull(request.headers["X-OpenSubtitles-Password"])
+            val body = Json.parseToJsonElement((request.body as TextContent).text).jsonObject
+            assertEquals("tools/call", body["method"]?.jsonPrimitive?.content)
+            assertEquals("search_subtitles", body["params"]?.jsonObject?.get("name")?.jsonPrimitive?.content)
+            """{"jsonrpc":"2.0","id":1,"result":{"structuredContent":{"page":1,"total_pages":1,"results":[{"language":"en","release":"BD","files":[{"file_id":9,"file_name":"Anime.srt"}]}]}}}"""
+        }
+        try {
+            val result = OpenSubtitlesClient(client, OpenSubtitlesSettings(username = "user", password = "password"))
+                .search("Anime")
+            assertEquals("Anime.srt", result.files.single().name)
+        } finally { client.close() }
+    }
+
+    @Test
+    fun `account login replaces the API key for downloads without sending credentials to the CDN`() = runTest {
+        val client = mockClient { request ->
+            when (request.url.host) {
+                "mcp.opensubtitles.com" -> {
+                    assertNull(request.headers["Api-Key"])
+                    assertEquals("user", request.headers["X-OpenSubtitles-Username"])
+                    assertEquals("password", request.headers["X-OpenSubtitles-Password"])
+                    val body = Json.parseToJsonElement((request.body as TextContent).text).jsonObject
+                    val params = body["params"]!!.jsonObject
+                    assertEquals("download_subtitle", params["name"]?.jsonPrimitive?.content)
+                    assertEquals("link", params["arguments"]?.jsonObject?.get("delivery")?.jsonPrimitive?.content)
+                    assertFalse(body.toString().contains("password"))
+                    """{"jsonrpc":"2.0","id":1,"result":{"structuredContent":{"link":"https://download.test/caption.srt"}}}"""
+                }
+                "download.test" -> {
+                    assertNull(request.headers["Api-Key"])
+                    assertNull(request.headers[HttpHeaders.Authorization])
+                    assertNull(request.headers["X-OpenSubtitles-Username"])
+                    assertNull(request.headers["X-OpenSubtitles-Password"])
+                    "1\n00:00:01,000 --> 00:00:02,000\nCaption"
+                }
+                else -> error("Unexpected host")
+            }
+        }
+        try {
+            val settings = OpenSubtitlesSettings(username = "user", password = "password")
+            assertTrue(settings.isConfigured)
+            assertTrue(OpenSubtitlesClient(client, settings).download(OpenSubtitleFile(1, "caption.srt", "en", "")).decodeToString().endsWith("Caption"))
+        } finally { client.close() }
+    }
+
+    @Test
+    fun `disabled search never sends requests and secrets are not in diagnostic strings`() = runTest {
         val settings = OpenSubtitlesSettings.Default
         assertEquals("", settings.apiKey)
         assertFalse(settings.isConfigured)
         val client = mockClient { error("No request expected") }
         try {
-            assertFailsWith<IllegalArgumentException> { OpenSubtitlesClient(client, settings).search("Anime") }
+            assertFailsWith<IllegalArgumentException> { OpenSubtitlesClient(client, settings.copy(enabled = false)).search("Anime") }
             val configured = settings.copy(apiKey = "secret-key", password = "secret-password")
             assertFalse(configured.toString().contains("secret"))
         } finally { client.close() }

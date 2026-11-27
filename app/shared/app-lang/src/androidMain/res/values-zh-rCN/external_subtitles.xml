@@ -6,7 +6,7 @@
     <string name="external_subtitle_off">关闭外挂字幕</string>
     <string name="external_subtitle_earlier">提前 0.5s</string>
     <string name="external_subtitle_later">延后 0.5s</string>
-    <string name="external_subtitle_setup">请在 设置 → 数据源与播放 → 播放器 → OpenSubtitles 中启用并填写 API Key</string>
+    <string name="external_subtitle_setup">搜索无需登录。下载请在 设置 → 数据源与播放 → 播放器 → OpenSubtitles 中填写账号密码或 API Key</string>
     <string name="external_subtitle_query">片名</string>
     <string name="external_subtitle_season">季（可选）</string>
     <string name="external_subtitle_episode">集（可选）</string>
@@ -20,13 +20,14 @@
     <string name="external_subtitle_next">下一页</string>
     <string name="external_subtitle_done">完成</string>
     <string name="opensubtitles_enabled">在线字幕</string>
-    <string name="opensubtitles_description">在播放器的外挂字幕菜单中搜索和下载字幕</string>
+    <string name="opensubtitles_description">可匿名搜索；下载使用账号密码或自填 API Key，应用不内置密钥</string>
     <string name="opensubtitles_not_configured">未配置</string>
-    <string name="opensubtitles_key_description">填写你在 OpenSubtitles.com 申请的 API Key，应用不内置密钥</string>
+    <string name="opensubtitles_key_description">可选：填写 OpenSubtitles.com 的 API Key。不填时可匿名搜索，也可使用账号密码下载</string>
     <string name="opensubtitles_username">用户名（可选）</string>
-    <string name="opensubtitles_anonymous">匿名下载</string>
+    <string name="opensubtitles_anonymous">未登录（可匿名搜索）</string>
     <string name="opensubtitles_password">密码（可选）</string>
     <string name="opensubtitles_languages">搜索语言</string>
     <string name="opensubtitles_languages_description">使用逗号分隔语言代码，例如 zh-cn,zh-tw,en,ja；留空搜索所有语言</string>
     <string name="external_subtitle_offset">偏移：%1$ss</string>
+    <string name="external_subtitle_disabled">OpenSubtitles 已在设置中关闭</string>
 </resources>

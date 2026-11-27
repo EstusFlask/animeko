@@ -613,11 +613,8 @@ internal fun EpisodeVideoImpl(
                                 }
                             }
 
-                            playerState.subtitleTracks?.let {
-                                PlayerControllerDefaults.SubtitleSwitcher(it, onSelect = { track ->
-                                    externalSubtitles?.clear()
-                                    it.select(track)
-                                })
+                            (externalSubtitles?.tracks ?: playerState.subtitleTracks)?.let {
+                                PlayerControllerDefaults.SubtitleSwitcher(it)
                             }
 
                             val playbackSpeedAlwaysOnRequester =

@@ -49,6 +49,7 @@ import me.him188.ani.app.data.network.OpenSubtitlesClient
 import me.him188.ani.app.data.network.OpenSubtitlesException
 import me.him188.ani.app.ui.lang.Lang
 import me.him188.ani.app.ui.lang.external_subtitle_auth_error
+import me.him188.ani.app.ui.lang.external_subtitle_disabled
 import me.him188.ani.app.ui.lang.external_subtitle_done
 import me.him188.ani.app.ui.lang.external_subtitle_earlier
 import me.him188.ani.app.ui.lang.external_subtitle_empty
@@ -156,7 +157,9 @@ internal fun ExternalSubtitlesDialog(
                     Text(stringResource(Lang.external_subtitle_offset, (offset / 1000.0).toString()))
                 }
                 Text("OpenSubtitles", style = MaterialTheme.typography.titleMedium)
-                if (!settings.isConfigured) {
+                if (!settings.enabled) {
+                    Text(stringResource(Lang.external_subtitle_disabled))
+                } else if (!settings.isConfigured) {
                     Text(stringResource(Lang.external_subtitle_setup))
                 }
                 OutlinedTextField(
@@ -177,7 +180,7 @@ internal fun ExternalSubtitlesDialog(
                 }
                 TextButton(
                     onClick = { searchPage(1) },
-                    enabled = settings.isConfigured && query.isNotBlank() && media != null && !busy,
+                    enabled = settings.enabled && query.isNotBlank() && !busy,
                     modifier = Modifier.testTag("SearchOpenSubtitles"),
                 ) { Text(stringResource(Lang.external_subtitle_search)) }
                 if (busy) CircularProgressIndicator()
@@ -197,7 +200,7 @@ internal fun ExternalSubtitlesDialog(
                     LazyColumn(Modifier.heightIn(max = 220.dp)) {
                         items(page.files, key = { it.id }) { file ->
                             TextButton(
-                                enabled = !busy && media != null,
+                                enabled = !busy && media != null && settings.isConfigured,
                                 onClick = {
                                     val target = media ?: return@TextButton
                                     runOperation {

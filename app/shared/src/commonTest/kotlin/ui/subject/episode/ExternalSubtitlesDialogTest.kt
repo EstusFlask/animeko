@@ -10,7 +10,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -30,7 +29,8 @@ import org.openani.mediamp.test.TestMediampPlayer
 
 class ExternalSubtitlesDialogTest {
     @Test
-    fun `local import remains available without an API key while online search is disabled`() = runAniComposeUiTest {
+    fun `anonymous search and local import remain available without an API key`() = runAniComposeUiTest {
+        var searches = 0
         setContent {
             ProvideCompositionLocalsForPreview {
                 val scope = rememberCoroutineScope()
@@ -42,14 +42,15 @@ class ExternalSubtitlesDialogTest {
                 val controller = remember { ExternalSubtitleController(player, scope) }
                 ExternalSubtitlesDialog(
                     player, controller, OpenSubtitlesSettings.Default, "Anime", "3",
-                    search = { _, _, _, _ -> error("Search requires an API key") },
+                    search = { _, _, _, _ -> searches++; OpenSubtitlePage(emptyList(), 1, 1) },
                     download = { error("No download expected") },
                     onDismissRequest = {},
                 )
             }
         }
         onNodeWithTag("ImportLocalSubtitle").assertIsDisplayed().assertIsEnabled()
-        onNodeWithTag("SearchOpenSubtitles").performScrollTo().assertIsNotEnabled()
+        onNodeWithTag("SearchOpenSubtitles").performScrollTo().assertIsEnabled().performClick()
+        runOnIdle { assertEquals(1, searches) }
     }
 
     @Test
