@@ -58,7 +58,7 @@ class EntryCacheTest {
     }
 
     @Test
-    fun `a file cached after it was played fetches nothing twice`() = runBlocking {
+    fun `a cache download skips blocks already held by playback`() = runBlocking {
         val content = payload((block * 40).toInt())
         val source = FakeRangeSource(content)
         val entry = testEntry(SystemPaths.createTempDirectory("entry-shared"), "01.mkv", content.size.toLong(), source)
@@ -70,10 +70,9 @@ class EntryCacheTest {
                     input.readAt(block * 20, 4096),
                 )
             }
-            // The cache writes what a stream fetched behind the stream, and a read-ahead the close
-            // cut short never lands, so what the download may skip is what the store holds once
-            // those writes have settled.
-            val held = settledDownloadedBytes(entry)
+            // Playback offers blocks to a bounded write queue; individual offers may be dropped.
+            waitUntil("playback leaves held blocks on disk") { (0 until 40).any { entry.pieceFinished(it) } }
+            val held = (0 until 40).filter { entry.pieceFinished(it) }
             val playbackRequests = source.requests.size
 
             val handle = entry.createHandle()
@@ -81,9 +80,13 @@ class EntryCacheTest {
             withTimeout(60.seconds) { entry.fileStats.first { it.isDownloadFinished } }
             handle.close()
 
+            // Playback writes still in flight may reduce the missing bytes after this snapshot.
+            // Every block already held at the snapshot must stay off the network.
             val downloaded = source.requests.drop(playbackRequests)
-                .sumOf { minOf(it.length, content.size - it.start) }
-            assertEquals(content.size - held, downloaded, "the download fetched what the store already held")
+            val fetchedAgain = held.filter { index ->
+                downloaded.any { request -> index * block in request.start until (request.start + request.length) }
+            }
+            assertTrue(fetchedAgain.isEmpty(), "the download fetched held blocks $fetchedAgain: $downloaded")
             assertContentEquals(content, entryData(entry))
         } finally {
             entry.close()
@@ -286,16 +289,6 @@ class EntryCacheTest {
 
     private fun PikPakFileEntry.pieceFinished(index: Int): Boolean =
         with(pieces) { pieces.createPieceByListIndexUnsafe(index).state == PieceState.FINISHED }
-
-    private suspend fun settledDownloadedBytes(entry: PikPakFileEntry): Long {
-        var last = -1L
-        while (true) {
-            val now = entry.fileStats.first().downloadedBytes
-            if (now == last) return now
-            last = now
-            delay(300.milliseconds)
-        }
-    }
 
     private suspend fun entryData(entry: PikPakFileEntry): ByteArray = entry.resolveFile().readBytes()
 }
