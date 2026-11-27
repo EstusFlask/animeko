@@ -1098,7 +1098,7 @@ workflow(
     name = "Build",
     on = listOf(
         // 其他分支的提交由 PR 构建. 同一个提交同时触发 push 与 pull_request 会重复运行整个 workflow.
-        Push(branches = listOf("main", "release/**"), pathsIgnore = commonIgnoredPaths),
+        Push(branches = listOf("main", "release/**", "emby-fix2", "codex/opensubtitles-local-subtitles"), pathsIgnore = commonIgnoredPaths),
         PullRequest(pathsIgnore = commonIgnoredPaths),
         // 没有 PR 的分支需要构建时手动运行.
         WorkflowDispatch(),

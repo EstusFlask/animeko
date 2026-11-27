@@ -2,6 +2,10 @@
 
 `build.yml` 和 `release.yml` 由 `src.main.kts` 生成而来。详情参考 <https://typesafegithub.github.io/github-workflows-kt/>。
 
+`Build` 对 `main`、`release/**`、`emby-fix2` 和 `codex/opensubtitles-local-subtitles` 的代码推送自动运行，
+也支持手动选择分支运行。Windows 的 x64、ARM64 产物由 `createReleaseDistributable` 生成，属于 Release 便携包；
+Android 的普通分支检查产物为 Debug APK。打包、测试检查和产物验证是不同步骤，上传产物不代表整个工作流通过。
+
 `pr-images.yml` 直接维护，拒绝 PR 在资源目录以外新增图片和视频，防止验证截图进入 git 历史。
 
 `datasource-test-mcp.yml` 直接维护，构建自带 JBR 的 `tools/datasource-test-mcp` Windows 发行包，不依赖仓库环境即可运行，用法见该工具的 README。
@@ -33,7 +37,7 @@ uv run --with pyyaml python .github/workflows/test_qa_review.py
 
 ## iOS Release 与 LiveContainer 源
 
-`ios-livecontainer-release.yml` 直接维护，手动选择源分支或 commit（默认 `main`），通过上游 Gradle 任务构建 Release IPA，
+`ios-livecontainer-release.yml` 直接维护，手动选择源分支或 commit（留空时使用运行工作流时选择的分支），通过上游 Gradle 任务构建 Release IPA，
 发布 `Animeko <版本号>`，资产名为 `Animeko-<版本号>.ipa`，应用名称为 `Animeko`、bundle ID 为 `org.animeko.animeko`。
 `publish_release=false` 时仅上传构建产物与诊断，不发布 Release 或更新 LiveContainer 源，适用于分支验证。
 ONNX Runtime iOS 依赖由 `prepare_onnxruntime_ios.py` 准备：验证固定 SHA512 的 Microsoft NuGet 包，

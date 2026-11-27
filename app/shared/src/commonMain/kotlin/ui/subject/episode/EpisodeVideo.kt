@@ -100,6 +100,7 @@ import me.him188.ani.app.ui.foundation.rememberDebugSettingsViewModel
 import me.him188.ani.app.ui.foundation.theme.AniTheme
 import me.him188.ani.app.ui.lang.Lang
 import me.him188.ani.app.ui.lang.always_on_top
+import me.him188.ani.app.ui.lang.external_subtitle_title
 import me.him188.ani.app.ui.lang.subject_episode_cache
 import me.him188.ani.app.ui.lang.subject_episode_collapse_sidebar
 import me.him188.ani.app.ui.lang.subject_episode_danmaku_settings_title
@@ -134,6 +135,8 @@ import me.him188.ani.app.ui.subject.episode.video.sidesheet.MediaSelectorSheet
 import me.him188.ani.app.ui.subject.episode.video.sidesheet.rememberTestEpisodeSelectorState
 import me.him188.ani.app.ui.subject.episode.video.topbar.EpisodePlayerTitle
 import me.him188.ani.app.ui.watchtogether.LocalWatchTogetherPlayerController
+import me.him188.ani.app.videoplayer.subtitle.ExternalSubtitleController
+import me.him188.ani.app.videoplayer.subtitle.ExternalSubtitleOverlay
 import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleAppearance
 import me.him188.ani.app.videoplayer.subtitle.SubtitleAppearance
 import me.him188.ani.app.videoplayer.ui.ControllerVisibility
@@ -227,6 +230,8 @@ internal fun EpisodeVideoImpl(
     opEdSkipDuration: Duration = DEFAULT_OP_ED_SKIP_DURATION,
     subtitleFontScale: Float = 1f,
     onSubtitleFontScaleChange: ((Float) -> Unit)? = null,
+    externalSubtitles: ExternalSubtitleController? = null,
+    onOpenExternalSubtitles: (() -> Unit)? = null,
     onClickSkipOpEd: (currentPositionMillis: Long) -> Unit = {
         playerState.skip(opEdSkipDuration.inWholeMilliseconds)
     },
@@ -317,6 +322,7 @@ internal fun EpisodeVideoImpl(
                 playerState = playerState,
                 subtitleFontScale = subtitleFontScale,
                 onSubtitleFontScaleChange = onSubtitleFontScaleChange,
+                onOpenExternalSubtitles = onOpenExternalSubtitles,
                 expanded = expanded,
                 opEdSkipDuration = opEdSkipDuration,
                 onClickSkipOpEd = onClickSkipOpEd,
@@ -385,6 +391,7 @@ internal fun EpisodeVideoImpl(
                                 }
                                 .matchParentSize(),
                         )
+                        externalSubtitles?.let { ExternalSubtitleOverlay(it) }
                     }
                 }
             },
@@ -607,7 +614,10 @@ internal fun EpisodeVideoImpl(
                             }
 
                             playerState.subtitleTracks?.let {
-                                PlayerControllerDefaults.SubtitleSwitcher(it)
+                                PlayerControllerDefaults.SubtitleSwitcher(it, onSelect = { track ->
+                                    externalSubtitles?.clear()
+                                    it.select(track)
+                                })
                             }
 
                             val playbackSpeedAlwaysOnRequester =
@@ -712,6 +722,7 @@ internal fun EpisodeVideoTopBarActions(
     onTogglePlayerStats: () -> Unit,
     alwaysOnTop: Boolean = false,
     onToggleAlwaysOnTop: (() -> Unit)? = null,
+    onOpenExternalSubtitles: (() -> Unit)? = null,
 ) {
     var showSubtitleSettings by rememberSaveable { mutableStateOf(false) }
     var showShareDropdown by rememberSaveable { mutableStateOf(false) }
@@ -858,6 +869,17 @@ internal fun EpisodeVideoTopBarActions(
                     },
                     leadingIcon = { Icon(Icons.Rounded.AspectRatio, null) },
                     trailingIcon = { Text(renderAspectRatioMode(videoAspectRatioControllerState.currentMode)) },
+                )
+            }
+            if (onOpenExternalSubtitles != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(Lang.external_subtitle_title)) },
+                    onClick = {
+                        showMoreDropdown = false
+                        onOpenExternalSubtitles()
+                    },
+                    leadingIcon = { Icon(AniIcons.SubtitleGear, null) },
+                    modifier = Modifier.testTag("ExternalSubtitlesMenuItem"),
                 )
             }
             if (onSubtitleFontScaleChange != null) {

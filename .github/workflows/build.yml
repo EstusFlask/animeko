@@ -8,6 +8,8 @@ on:
     branches:
     - 'main'
     - 'release/**'
+    - 'emby-fix2'
+    - 'codex/opensubtitles-local-subtitles'
     paths-ignore:
     - '**/*.md'
     - '.idea/**'

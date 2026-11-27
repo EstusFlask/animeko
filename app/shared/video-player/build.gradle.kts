@@ -30,6 +30,7 @@ kotlin {
     }
     sourceSets.commonTest.dependencies {
         implementation(projects.utils.uiTesting)
+        implementation(libs.mediamp.test)
     }
     sourceSets.androidMain.dependencies {
         implementation(libs.compose.material3.adaptive.core)
