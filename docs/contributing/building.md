@@ -95,6 +95,7 @@ ani.build.framework=true
 脚本验证 Microsoft NuGet 包及其源码提交，生成包含 C 框架和 Objective-C 包装层的本地 CocoaPods spec 仓库。
 设置 `ANI_ONNXRUNTIME_SPEC_REPO` 为生成的仓库的 `file://` URL 后，宿主 Podfile 与 Kotlin 合成项目使用同一依赖源。
 Kotlin 合成 Podfile 中该仓库优先于官方 CDN；CI 在 Xcode 编译前安装合成项目依赖并校验源顺序。
+两项安装任务共享 CocoaPods 的全局仓库与下载缓存；同时请求时，宿主项目安装在合成项目安装完成后执行。
 `app/ios/podspecs` 保存 CocoaPods Specs 中对应版本的元数据；更新运行库时需要同步版本、摘要和源码提交。
 
 在 IDE 中双击 Ctrl，可用的命令：
