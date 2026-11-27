@@ -50,8 +50,8 @@ kotlin {
             providers.environmentVariable("ANI_ONNXRUNTIME_SPEC_REPO").orNull?.let { repository ->
                 specRepos {
                     url(repository)
-                    url("https://cdn.cocoapods.org/")
                 }
+                prioritizeCocoaPodsSpecRepository(repository)
             }
             // https://kotlinlang.org/docs/native-cocoapods.html#configure-existing-project
             framework {

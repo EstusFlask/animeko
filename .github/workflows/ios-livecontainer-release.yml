@@ -145,10 +145,22 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build-diagnostics
-          ./gradlew :app:shared:application:generateDummyFramework :app:ios:podInstall \
+          ./gradlew :app:shared:application:generateDummyFramework \
+            :app:shared:application:podInstallSyntheticIos :app:ios:podInstall \
             :app:ios:patchInfoPlist --stacktrace --console=plain \
             '-Dorg.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8' \
             2>&1 | tee build-diagnostics/prepare.log
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          podfile = Path("app/shared/application/build/cocoapods/synthetic/ios/Podfile")
+          sources = [line for line in podfile.read_text().splitlines() if line.startswith("source ")]
+          expected = f"source '{os.environ['ANI_ONNXRUNTIME_SPEC_REPO']}'"
+          if not sources or sources[0] != expected:
+              raise SystemExit(f"Prepared ONNX Runtime repository must be first in {podfile}: {sources}")
+          print(f"Verified synthetic CocoaPods source priority: {sources}")
+          PY
           grep -q ':syncFramework' app/shared/application/application.podspec
           test "${OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED:-NO}" != YES
 
@@ -277,5 +289,8 @@ jobs:
             build-diagnostics/
             **/build/reports/tests/
             app/ios/build/reports/
+            app/ios/Podfile.lock
+            app/shared/application/build/cocoapods/synthetic/ios/Podfile
+            app/shared/application/build/cocoapods/synthetic/ios/Podfile.lock
           if-no-files-found: ignore
           retention-days: 7
