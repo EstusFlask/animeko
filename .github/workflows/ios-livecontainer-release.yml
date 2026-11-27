@@ -134,6 +134,12 @@ jobs:
             xcrun clang -arch arm64 -x c -c -o "$RUNNER_TEMP/arm64-smoke.o" -
           bash "$RUNNER_TEMP/verify-arm64.sh" "$RUNNER_TEMP/arm64-smoke.o"
 
+      - name: Prepare pinned ONNX Runtime iOS dependencies
+        timeout-minutes: 15
+        run: |
+          python3 .github/scripts/prepare_onnxruntime_ios.py \
+            --output "$RUNNER_TEMP/onnxruntime-ios" --github-env "$GITHUB_ENV"
+
       - name: Prepare iOS framework and CocoaPods - upstream tasks
         timeout-minutes: 30
         run: |

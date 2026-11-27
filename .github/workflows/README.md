@@ -36,6 +36,10 @@ uv run --with pyyaml python .github/workflows/test_qa_review.py
 `ios-livecontainer-release.yml` 直接维护，手动选择源分支或 commit（默认 `main`），通过上游 Gradle 任务构建 Release IPA，
 发布 `Animeko <版本号>`，资产名为 `Animeko-<版本号>.ipa`，应用名称为 `Animeko`、bundle ID 为 `org.animeko.animeko`。
 `publish_release=false` 时仅上传构建产物与诊断，不发布 Release 或更新 LiveContainer 源，适用于分支验证。
+ONNX Runtime iOS 依赖由 `prepare_onnxruntime_ios.py` 准备：验证固定 SHA512 的 Microsoft NuGet 包，
+提取设备与模拟器 XCFramework，并校验 Objective-C 源码提交与 NuGet 元数据一致。
+源码从 ROCm 的 ONNX Runtime 仓库按固定上游提交读取。临时 CocoaPods spec 仓库同时供宿主 Podfile 和 Kotlin 合成项目使用，
+其中归档通过 SHA256 校验；运行库版本与 `libs.versions.toml` 一致。
 显示版本移除开发后缀，构建号单调递增。Release 同时包含 `ios-release.json` 元数据与 SHA256 校验。
 
 LiveContainer 订阅地址固定为 `https://github.com/EstusFlask/animeko/releases/download/livecontainer-source/source.json`。

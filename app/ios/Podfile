@@ -1,5 +1,10 @@
 require_relative 'scripts/sentry_terminate_patch'
 
+if ENV['ANI_ONNXRUNTIME_SPEC_REPO']
+  source ENV.fetch('ANI_ONNXRUNTIME_SPEC_REPO')
+  source 'https://cdn.cocoapods.org/'
+end
+
 target 'Animeko' do
   use_frameworks!
   platform :ios, '16.0'
