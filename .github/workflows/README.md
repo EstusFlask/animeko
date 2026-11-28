@@ -53,6 +53,8 @@ uv run --with pyyaml python .github/workflows/test_qa_review.py
 
 `main` 是默认分支，保存上游代码、功能修改及其测试，Workflow 与发行配置使用上游版本。
 `codex/ci-cd` 基于 `main` 保存 fork 的 Runner、依赖准备、验证脚本和发行配置。
+fork 构建组合还包含 PikPak 下载顺序、暂停取消与缓存写入竞态的修复及回归测试；
+这些额外修改维护在本分支，`main` 中的 PikPak 实现与上游一致。
 功能与上游 PR 从 `main` 或专用功能分支整理；构建分支通过合并 `main` 接收功能更新，CI 分支的发行提交不合回 `main`。
 
 ```shell
