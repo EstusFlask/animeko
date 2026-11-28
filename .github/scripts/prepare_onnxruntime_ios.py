@@ -1,4 +1,4 @@
-"""Prepare pinned iOS CocoaPods from Microsoft's NuGet runtime and its source commit."""
+"""Prepare the complete iOS spec repository with pinned ONNX Runtime and Sentry metadata."""
 
 import argparse
 import base64
@@ -27,6 +27,9 @@ SOURCE_COMMIT = "f217402897f40ebba457e2421bc0a4702771968e"
 SOURCE_REPOSITORY = "https://github.com/ROCm/onnxruntime.git"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PODSPEC_DIRECTORY = REPOSITORY_ROOT / "app/ios/podspecs"
+SENTRY_VERSION = "8.49.2"
+# CocoaPods/Specs blob 056b47ca46d6eb2422ce7d593e7dc06a74bd74a2, normalized to LF.
+SENTRY_PODSPEC_SHA256 = "3dc2aaf5b7d9249a1930dc0ba3034eac9fb79add744c082b7123994d0a4828c0"
 
 
 def git(directory, *arguments):
@@ -133,6 +136,12 @@ def archive_pod(directory, output):
 def prepare_specs(package, source, output, podspec_directory=PODSPEC_DIRECTORY):
     verify_package(package)
     verify_source(source)
+    sentry_spec = (podspec_directory / "Sentry.podspec.json").read_text(encoding="utf-8")
+    if hashlib.sha256(sentry_spec.encode("utf-8")).hexdigest() != SENTRY_PODSPEC_SHA256:
+        raise ValueError("Sentry podspec SHA256 mismatch")
+    sentry = json.loads(sentry_spec)
+    if sentry["name"] != "Sentry" or sentry["version"] != SENTRY_VERSION:
+        raise ValueError("Sentry podspec version mismatch")
     pod_root = output / "pods"
     c_pod = pod_root / "onnxruntime-c"
     c_pod.mkdir(parents=True, exist_ok=True)
@@ -155,11 +164,14 @@ def prepare_specs(package, source, output, podspec_directory=PODSPEC_DIRECTORY):
         path = spec_repo / "Specs" / name / VERSION / f"{name}.podspec.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
+    sentry_path = spec_repo / "Specs/Sentry" / SENTRY_VERSION / "Sentry.podspec.json"
+    sentry_path.parent.mkdir(parents=True, exist_ok=True)
+    sentry_path.write_text(sentry_spec, encoding="utf-8")
     if not (spec_repo / ".git").exists():
         git(spec_repo, "init", "--quiet")
     git(spec_repo, "add", "--", "Specs")
     git(spec_repo, "-c", "user.name=Animeko dependency preparation", "-c", "user.email=dependency-build@localhost",
-        "-c", "commit.gpgsign=false", "commit", "--quiet", "--allow-empty", "-m", f"ONNX Runtime {VERSION} iOS pods")
+        "-c", "commit.gpgsign=false", "commit", "--quiet", "--allow-empty", "-m", f"ONNX Runtime {VERSION} and Sentry {SENTRY_VERSION} iOS pods")
     return spec_repo
 
 
@@ -185,7 +197,7 @@ def main():
     if args.github_env:
         with args.github_env.open("a", encoding="utf-8") as stream:
             stream.write(f"ANI_ONNXRUNTIME_SPEC_REPO={repo.as_uri()}\n")
-    print(f"Prepared ONNX Runtime {VERSION} device and simulator pods: {repo}")
+    print(f"Prepared ONNX Runtime {VERSION} device and simulator pods and Sentry {SENTRY_VERSION} metadata: {repo}")
 
 
 if __name__ == "__main__":

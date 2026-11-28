@@ -52,8 +52,8 @@ fun Project.configureAniCocoapods() {
     }
 }
 
-/** Places a prepared spec repository before the public CDN in Kotlin's synthetic Podfiles. */
-fun Project.prioritizeCocoaPodsSpecRepository(repository: String) {
+/** Resolves synthetic CocoaPods dependencies exclusively from the prepared spec repository. */
+fun Project.usePreparedCocoaPodsSpecRepository(repository: String) {
     tasks.withType(PodGenTask::class.java).configureEach {
         val syntheticPodfile = podfile
         doLast {
@@ -61,8 +61,7 @@ fun Project.prioritizeCocoaPodsSpecRepository(repository: String) {
             val source = "source '$repository'\n"
             val content = file.readText()
             check(source in content) { "Prepared CocoaPods repository is missing from $file" }
-            // Kotlin's generator includes the public CDN before repositories added through specRepos.
-            file.writeText(source + content.replace(source, ""))
+            file.writeText(source + content.lineSequence().filterNot { it.startsWith("source ") }.joinToString("\n"))
         }
     }
 }

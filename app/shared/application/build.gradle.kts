@@ -51,7 +51,7 @@ kotlin {
                 specRepos {
                     url(repository)
                 }
-                prioritizeCocoaPodsSpecRepository(repository)
+                usePreparedCocoaPodsSpecRepository(repository)
             }
             // https://kotlinlang.org/docs/native-cocoapods.html#configure-existing-project
             framework {

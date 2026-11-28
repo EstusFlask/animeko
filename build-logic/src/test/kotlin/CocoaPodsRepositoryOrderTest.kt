@@ -18,10 +18,10 @@ import kotlin.test.assertEquals
 
 class CocoaPodsRepositoryOrderTest {
     @Test
-    fun `synthetic podfile resolves prepared pods before the public CDN`() {
+    fun `synthetic podfile resolves prepared pods without public CDN discovery`() {
         val project = ProjectBuilder.builder().build()
         val repository = "file:///prepared/onnxruntime-ios/specs.git"
-        project.prioritizeCocoaPodsSpecRepository(repository)
+        project.usePreparedCocoaPodsSpecRepository(repository)
         // Drive the pinned plugin's generator without an Apple toolchain.
         val task = project.tasks.register("podGenIos", PodGenTask::class.java).get().apply {
             family.set(Family.IOS)
@@ -36,7 +36,7 @@ class CocoaPodsRepositoryOrderTest {
 
         val sources = podfile.readLines().filter { it.startsWith("source ") }
         assertEquals(
-            listOf("source '$repository'", "source 'https://cdn.cocoapods.org'"),
+            listOf("source '$repository'"),
             sources,
         )
     }

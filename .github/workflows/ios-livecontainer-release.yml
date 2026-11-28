@@ -134,7 +134,10 @@ jobs:
             xcrun clang -arch arm64 -x c -c -o "$RUNNER_TEMP/arm64-smoke.o" -
           bash "$RUNNER_TEMP/verify-arm64.sh" "$RUNNER_TEMP/arm64-smoke.o"
 
-      - name: Prepare pinned ONNX Runtime iOS dependencies
+      - name: Test iOS dependency preparation
+        run: python3 -B -m unittest discover -s .github/scripts -p test_prepare_onnxruntime_ios.py
+
+      - name: Prepare pinned iOS dependencies
         timeout-minutes: 15
         run: |
           python3 .github/scripts/prepare_onnxruntime_ios.py \
@@ -157,9 +160,9 @@ jobs:
           podfile = Path("app/shared/application/build/cocoapods/synthetic/ios/Podfile")
           sources = [line for line in podfile.read_text().splitlines() if line.startswith("source ")]
           expected = f"source '{os.environ['ANI_ONNXRUNTIME_SPEC_REPO']}'"
-          if not sources or sources[0] != expected:
-              raise SystemExit(f"Prepared ONNX Runtime repository must be first in {podfile}: {sources}")
-          print(f"Verified synthetic CocoaPods source priority: {sources}")
+          if sources != [expected]:
+              raise SystemExit(f"Synthetic CocoaPods dependencies must use only the prepared repository in {podfile}: {sources}")
+          print(f"Verified prepared CocoaPods repository: {sources}")
           PY
           grep -q ':syncFramework' app/shared/application/application.podspec
           test "${OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED:-NO}" != YES

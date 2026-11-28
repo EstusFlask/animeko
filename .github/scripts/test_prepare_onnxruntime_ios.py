@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -75,6 +76,10 @@ class PrepareOnnxruntimeIosTests(unittest.TestCase):
         repo = module.prepare_specs(self.package, self.source, self.root / "prepared")
         clone = self.root / "clone"
         subprocess.run(["git", "clone", "--quiet", repo.as_uri(), str(clone)], check=True)
+        self.assertEqual({"onnxruntime-c", "onnxruntime-objc", "Sentry"}, {p.name for p in (clone / "Specs").iterdir()})
+        sentry = json.loads((clone / "Specs/Sentry" / module.SENTRY_VERSION / "Sentry.podspec.json").read_text())
+        self.assertEqual(module.SENTRY_VERSION, sentry["version"])
+        self.assertEqual(module.SENTRY_VERSION, sentry["source"]["tag"])
         for name in ["onnxruntime-c", "onnxruntime-objc"]:
             spec = json.loads((clone / "Specs" / name / module.VERSION / f"{name}.podspec.json").read_text())
             self.assertEqual(module.VERSION, spec["version"])
@@ -88,6 +93,35 @@ class PrepareOnnxruntimeIosTests(unittest.TestCase):
                     self.assertIn("Headers/onnxruntime_c_api.h", contents.namelist())
                 else:
                     self.assertEqual(b"// Objective-C source\n", contents.read("objectivec/ort_env.mm"))
+
+        specs = {json.loads(p.read_text())["name"]: json.loads(p.read_text()) for p in (clone / "Specs").rglob("*.podspec.json")}
+
+        def dependencies(spec):
+            yield from spec.get("dependencies", {})
+            for subspec in spec.get("subspecs", []):
+                yield from dependencies(subspec)
+
+        for spec in specs.values():
+            for dependency in dependencies(spec):
+                self.assertIn(dependency.split("/")[0], specs)
+
+    def test_rejects_modified_sentry_podspec(self):
+        self.package_fixture()
+        podspecs = self.root / "podspecs"
+        shutil.copytree(module.PODSPEC_DIRECTORY, podspecs)
+        with (podspecs / "Sentry.podspec.json").open("a", encoding="utf-8") as stream:
+            stream.write(" ")
+        with self.assertRaisesRegex(ValueError, "Sentry podspec SHA256 mismatch"):
+            module.prepare_specs(self.package, self.source, self.root / "prepared", podspecs)
+
+    def test_accepts_sentry_podspec_with_windows_checkout_line_endings(self):
+        self.package_fixture()
+        podspecs = self.root / "podspecs"
+        shutil.copytree(module.PODSPEC_DIRECTORY, podspecs)
+        sentry = podspecs / "Sentry.podspec.json"
+        sentry.write_bytes(sentry.read_text(encoding="utf-8").replace("\n", "\r\n").encode("utf-8"))
+        repo = module.prepare_specs(self.package, self.source, self.root / "prepared", podspecs)
+        self.assertTrue((repo / "Specs/Sentry" / module.SENTRY_VERSION / "Sentry.podspec.json").is_file())
 
     def test_rejects_a_corrupted_nuget_package(self):
         self.package_fixture()
