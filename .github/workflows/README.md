@@ -17,6 +17,8 @@ Android、AndroidX 和 Google 组件优先查询 Google Maven 仓库。
 最多使用两个 worker，为系统和原生编译工具保留内存。设备测试 APK 只包含模拟器使用的 ABI，应用打包任务覆盖全部发布 ABI。
 Windows 便携包验证的数据、应用日志和进程输出保存在 `update-e2e/windows-verify-*`，
 失败诊断随验证产物上传，原生输入断言和异常详情同时写入任务日志。
+Windows 验证脚本自测为每个子进程提供 120 秒预算，覆盖托管 ARM64 runner 的启动延迟，
+并校验成功与失败的退出码、标准输出、标准错误和应用诊断日志。
 
 `pr-images.yml` 直接维护，拒绝 PR 在资源目录以外新增图片和视频，防止验证截图进入 git 历史。
 

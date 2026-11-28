@@ -47,7 +47,7 @@ class WindowsTestRunnerTest(unittest.TestCase):
                     result = subprocess.run(
                         ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                          "-File", str(RUNNER_SCRIPT.resolve()), str(root), task],
-                        cwd=root, env=environment, capture_output=True, text=True, timeout=30,
+                        cwd=root, env=environment, capture_output=True, text=True, timeout=120,
                     )
                     self.assertEqual(exit_code, result.returncode, result.stdout + result.stderr)
                     self.assertIn("fixture diagnostic", result.stdout)
