@@ -154,7 +154,7 @@ fun parseExternalSubtitle(bytes: ByteArray): List<SubtitleCue> {
         val parts = line.substringAfter(':').trimStart().split(',', limit = format.size)
         fun field(name: String) = parts.getOrNull(format.indexOf(name)) ?: ""
         if (Regex("""\\p[1-9]""").containsMatchIn(field("text"))) return@mapNotNull null
-        val content = field("text").replace(Regex("\\{[^}]*}"), "")
+        val content = field("text").replace(Regex("\\{[^}]*\\}"), "")
             .replace("\\N", "\n").replace("\\n", "\n").replace("\\h", " ")
         parseSubtitleCues("${field("start")} --> ${field("end")}\n$content").firstOrNull()
     }.sortedBy { it.startMillis }.toList()

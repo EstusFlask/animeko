@@ -82,7 +82,7 @@ actual fun VideoPlayer(
                         libassPlayer?.assHandler?.track?.getEvents().orEmpty().filter {
                             position >= it.start && position < it.start + it.duration
                         }.map { it.text }.filterNot { Regex("""\\p[1-9]""").containsMatchIn(it) }
-                            .map { it.replace(Regex("\\{[^}]*}"), "").replace("\\N", "\n").replace("\\n", "\n").replace("\\h", " ") }
+                            .map { it.replace(Regex("\\{[^}]*\\}"), "").replace("\\N", "\n").replace("\\n", "\n").replace("\\h", " ") }
                             .distinct().joinToString("\n")
                     } else cues.mapNotNull { it.text?.toString() }.distinct().joinToString("\n")
                     delay(50)
