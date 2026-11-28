@@ -26,6 +26,7 @@ param (
     [string]$InputPath,
 
     [Parameter(Mandatory = $true)]
+    [ValidatePattern('^[A-Za-z0-9_-]+$')]
     [string]$TestString
 )
 
@@ -87,9 +88,24 @@ Write-Host "Found Ani.exe at: $($aniExe.FullName)"
 Write-Host "Setting ANIMEKO_DESKTOP_TEST_TASK to '$TestString'..."
 $env:ANIMEKO_DESKTOP_TEST_TASK = $TestString
 $env:ANI_DISALLOW_PROJECT_DIRECTORIES_FALLBACK = "true"
+$diagnosticDirectory = [System.IO.Path]::GetFullPath((Join-Path "update-e2e" "windows-verify-$TestString"))
+New-Item -ItemType Directory -Path $diagnosticDirectory -Force | Out-Null
+$env:ANIMEKO_DESKTOP_TEST_DATA_DIR = $diagnosticDirectory
 
 Write-Host "Running Ani.exe..."
-$process = Start-Process -FilePath $aniExe.FullName -Wait -PassThru
+$process = Start-Process -FilePath $aniExe.FullName -Wait -PassThru -WindowStyle Hidden `
+    -RedirectStandardOutput (Join-Path $diagnosticDirectory "stdout.log") `
+    -RedirectStandardError (Join-Path $diagnosticDirectory "stderr.log")
+
+$appLogs = Join-Path $diagnosticDirectory "data\logs"
+if (Test-Path -LiteralPath $appLogs) {
+    Get-ChildItem -LiteralPath $appLogs -Filter "*.log" -File | ForEach-Object {
+        Select-String -LiteralPath $_.FullName `
+            -Pattern 'native input verification|No matching pointer|InjectTouchInput|!!!ANI FATAL EXCEPTION!!!' `
+            -Context 0,12 | ForEach-Object { Write-Host $_.ToString() }
+    }
+}
+Write-Host "Verification diagnostics: $diagnosticDirectory"
 
 if ($process.ExitCode -ne 0) {
     Write-Error "Ani.exe exited with code $($process.ExitCode)."

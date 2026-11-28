@@ -471,10 +471,11 @@ run {
         runTests = true,
         uploadDesktopInstallers = true,
         extraGradleArgs = listOf(
+            "--max-workers=2",
         ),
         buildAllAndroidAbis = true,
-        gradleHeap = "8g",
-        kotlinCompilerHeap = "6g",
+        gradleHeap = "4g",
+        kotlinCompilerHeap = "3g",
     )
     val ghMac15Intel = MatrixInstance(
         runner = Runner.GithubMacOS15Intel,
@@ -704,6 +705,20 @@ fun MatrixInstance.androidInstrumentedTestJobs(): List<AndroidInstrumentedTestJo
 
 fun WorkflowBuilder.addAndroidInstrumentedTestJobs(matrix: MatrixInstance) {
     for (testJob in matrix.androidInstrumentedTestJobs()) {
+        // 托管 runner 为系统、原生编译器和 Android 构建工具保留内存, 测试 APK 只包含模拟器使用的 ABI.
+        val testMatrix = if (matrix.selfHosted) matrix else MatrixInstance(
+            runner = matrix.runner,
+            runsOn = matrix.runsOn,
+            uploadApk = false,
+            composeResourceTriple = matrix.composeResourceTriple,
+            extraGradleArgs = (matrix.extraGradleArgs.filterNot { it.startsWith("-P$ANI_ANDROID_ABIS=") } + listOf(
+                "-P$ANI_ANDROID_ABIS=${testJob.emulators.first().arch.stringValue}",
+                "--max-workers=2",
+            )).distinct(),
+            buildAllAndroidAbis = false,
+            gradleHeap = "4g",
+            kotlinCompilerHeap = "3g",
+        )
         job(
             id = "android-test_${matrix.runner.id}_${testJob.id}",
             name = "Android Instrumented Test (${testJob.label})",
@@ -714,7 +729,7 @@ fun WorkflowBuilder.addAndroidInstrumentedTestJobs(matrix: MatrixInstance) {
             `if` = if (matrix.selfHosted) expr { github.isAnimekoRepository and github.isPush } else null,
         ) {
             uses(action = Checkout(submodules_Untyped = "recursive"))
-            with(WithMatrix(matrix)) {
+            with(WithMatrix(testMatrix)) {
                 freeSpace()
                 enableSwap()
                 deleteLocalProperties()
@@ -890,6 +905,11 @@ fun getVerifyJobBody(
     when (runner.os to runner.arch) {
         OS.WINDOWS to Arch.X64,
         OS.WINDOWS to Arch.AARCH64 -> {
+            run(
+                name = "Test Windows verification diagnostics",
+                shell = Shell.PowerShell,
+                command = "python -B -m unittest discover -s ci-helper -p test_windows_test_runner.py",
+            )
             // download-artifact 按内容类型自动解压 zip, 得到 Ani 目录.
             usesWithAttempts(
                 name = "Download Windows ${if (runner.arch == Arch.X64) "x64" else "AArch64"} Portable",
@@ -1067,6 +1087,10 @@ fun WorkflowBuilder.addConsistencyCheckJob(filename: String) {
         run(
             name = "Test dependency download retries",
             command = "python3 -B -m unittest discover -s ci-helper -p test_run_gradle_with_retry.py",
+        )
+        run(
+            name = "Test Android test runner budgets",
+            command = "python3 -B -m unittest discover -s ci-helper -p test_android_test_workflow.py",
         )
         val originalPath = """.github/workflows/$filename"""
         val backupPath = """.github/workflows/$filename-check.yml"""

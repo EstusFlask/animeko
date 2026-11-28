@@ -9,6 +9,11 @@ Android 的普通分支检查产物为 Debug APK。打包、测试检查和产�
 依赖准备步骤通过 `ci-helper/run-gradle-with-retry.py` 执行 Gradle。依赖仓库返回 HTTP 429 时等待 30、60 秒重试，
 编译、测试和其他错误直接保留原退出码；工作流中各步骤的外层重试策略独立生效。
 
+托管的 Ubuntu 构建与 Android 设备测试任务中，Gradle 与 Kotlin 编译器的最大堆合计为 7 GB，
+最多使用两个 worker，为系统和原生编译工具保留内存。设备测试 APK 只包含模拟器使用的 ABI，应用打包任务覆盖全部发布 ABI。
+Windows 便携包验证的数据、应用日志和进程输出保存在 `update-e2e/windows-verify-*`，
+失败诊断随验证产物上传，原生输入断言和异常详情同时写入任务日志。
+
 `pr-images.yml` 直接维护，拒绝 PR 在资源目录以外新增图片和视频，防止验证截图进入 git 历史。
 
 `datasource-test-mcp.yml` 直接维护，构建自带 JBR 的 `tools/datasource-test-mcp` Windows 发行包，不依赖仓库环境即可运行，用法见该工具的 README。
