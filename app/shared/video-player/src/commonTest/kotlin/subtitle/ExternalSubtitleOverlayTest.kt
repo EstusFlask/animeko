@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -30,6 +31,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import me.him188.ani.app.data.models.preference.SubtitleStyle
 import me.him188.ani.app.data.models.preference.SubtitleTextConversion
 import me.him188.ani.app.ui.framework.AniComposeUiTest
 import me.him188.ani.app.ui.framework.runAniComposeUiTest
@@ -38,6 +41,22 @@ import org.openani.mediamp.source.UriMediaData
 import org.openani.mediamp.test.TestMediampPlayer
 
 class ExternalSubtitleOverlayTest {
+    @Test
+    fun `selected caption uses chosen color and moves within the player bounds`() = runAniComposeUiTest {
+        var style by mutableStateOf(SubtitleStyle.Default)
+        setContent {
+            CompositionLocalProvider(LocalSubtitleAppearance provides SubtitleAppearance(style = style)) {
+                Box(Modifier.requiredSize(640.dp, 360.dp)) { SubtitleTextOverlay("Caption") }
+            }
+        }
+        val bottom = onNodeWithTag("ExternalSubtitleText").fetchSemanticsNode().boundsInRoot.top
+        runOnIdle { style = style.copy(textColor = 0xFFFFFF00, verticalPosition = 0f, backgroundEnabled = true) }
+        assertEquals(Color.Yellow, subtitleLayout().layoutInput.style.color)
+        val bounds = onNodeWithTag("ExternalSubtitleText").fetchSemanticsNode().boundsInRoot
+        assertTrue(bounds.top < bottom)
+        assertTrue(bounds.width > 0 && bounds.height > 0)
+    }
+
     @Test
     fun `selected local and online subtitles convert from their originals and respect off and seek`() = runAniComposeUiTest {
         var conversion by mutableStateOf(SubtitleTextConversion.ORIGINAL)

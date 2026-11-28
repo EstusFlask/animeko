@@ -1173,6 +1173,8 @@ private fun EpisodeVideo(
         onSubtitleTextConversionChange = vm::setSubtitleTextConversion,
         subtitleFontScale = vm.videoScaffoldConfig.subtitleFontScale,
         onSubtitleFontScaleChange = vm::setSubtitleFontScale,
+        subtitleStyle = vm.videoScaffoldConfig.subtitleStyle,
+        onSubtitleStyleChange = vm::setSubtitleStyle,
         externalSubtitles = vm.externalSubtitles,
         onOpenExternalSubtitles = { showExternalSubtitles = true },
         onClickSkipOpEd = { vm.onClickSkipOpEd(it) },

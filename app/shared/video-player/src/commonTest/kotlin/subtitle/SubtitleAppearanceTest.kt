@@ -9,8 +9,21 @@ package me.him188.ani.app.videoplayer.subtitle
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import me.him188.ani.app.data.models.preference.SubtitleStyle
 
 class SubtitleAppearanceTest {
+    @Test
+    fun `position changes preserve bounds and native styling is kept for defaults`() {
+        val top = subtitleRegion(1280.0, 720.0, SubtitleSafeArea(), 0f)
+        val middle = subtitleRegion(1280.0, 720.0, SubtitleSafeArea(), 0.5f)
+        val bottom = subtitleRegion(1280.0, 720.0, SubtitleSafeArea(), 1f)
+        assertTrue(top.top < middle.top && middle.top < bottom.top)
+        assertEquals(top.height, bottom.height)
+        assertTrue(!SubtitleAppearance().requiresTextOverlay)
+        assertTrue(SubtitleAppearance(style = SubtitleStyle(textColor = 0xFFFFFF00)).requiresTextOverlay)
+        assertEquals(bottom, subtitleRegion(1280.0, 720.0, SubtitleSafeArea(), Float.NaN))
+    }
+
     @Test
     fun `font scales are bounded and invalid values use the default`() {
         assertEquals(SubtitleAppearance.MinFontSize, SubtitleAppearance(-1f).fontSize)

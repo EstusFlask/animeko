@@ -116,6 +116,7 @@ data class VideoScaffoldConfig @SerializationOnly constructor(
     val subtitleFontScale: Float = 1f,
     /** 所选文本字幕的显示文字，原始字幕内容保持完整。 */
     val subtitleTextConversion: SubtitleTextConversion = SubtitleTextConversion.ORIGINAL,
+    val subtitleStyle: SubtitleStyle = SubtitleStyle.Default,
     /**
      * 在编辑弹幕时暂停视频.
      * @since 3.2.0-beta01

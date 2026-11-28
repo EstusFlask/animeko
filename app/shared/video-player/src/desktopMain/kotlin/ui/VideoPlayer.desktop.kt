@@ -12,9 +12,9 @@ package me.him188.ani.app.videoplayer.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,6 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import me.him188.ani.app.data.models.preference.SubtitleTextConversion
 import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleAppearance
+import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleDelayMillis
 import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleTextConversion
 import me.him188.ani.app.videoplayer.subtitle.SubtitleTextOverlay
 import org.openani.mediamp.MediampPlayer
@@ -50,24 +51,29 @@ actual fun VideoPlayer(
 @Composable
 private fun MpvSubtitleOverlay(player: MpvMediampPlayer) {
     val handle = remember(player) { player.impl as MPVHandle }
-    val scale = LocalSubtitleAppearance.current.effectiveFontScale
+    val appearance = LocalSubtitleAppearance.current
+    val scale = appearance.effectiveFontScale
+    val subtitleDelay = LocalSubtitleDelayMillis.current
     val conversion = LocalSubtitleTextConversion.current
     val selected = player.subtitleTracks?.selected?.collectAsState()?.value
     var text by remember(player) { mutableStateOf("") }
     DisposableEffect(handle) {
         val visibility = handle.getPropertyBoolean("sub-visibility")
         val fontScale = handle.getPropertyDouble("sub-scale")
+        val offset = handle.getPropertyDouble("sub-delay")
         onDispose {
             runCatching {
                 handle.setPropertyBoolean("sub-visibility", visibility)
                 handle.setPropertyDouble("sub-scale", fontScale)
+                handle.setPropertyDouble("sub-delay", offset)
             }
         }
     }
     LaunchedEffect(handle, scale) { handle.setPropertyDouble("sub-scale", scale.toDouble()) }
-    LaunchedEffect(handle, conversion, selected) {
+    LaunchedEffect(handle, subtitleDelay) { handle.setPropertyDouble("sub-delay", subtitleDelay / 1000.0) }
+    LaunchedEffect(handle, conversion, selected, appearance.requiresTextOverlay) {
         text = ""
-        if (conversion == SubtitleTextConversion.ORIGINAL) {
+        if (conversion == SubtitleTextConversion.ORIGINAL && !appearance.requiresTextOverlay) {
             return@LaunchedEffect
         }
         val reader = MpvSubtitleReader(handle)

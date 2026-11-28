@@ -4,8 +4,8 @@
     <string name="external_subtitle_import">导入本地字幕</string>
     <string name="external_subtitle_formats">SRT / WebVTT / ASS / SSA，UTF-8 或 UTF-16 文本</string>
     <string name="external_subtitle_off">关闭外挂字幕</string>
-    <string name="external_subtitle_earlier">提前 0.5s</string>
-    <string name="external_subtitle_later">延后 0.5s</string>
+    <string name="external_subtitle_earlier">提前 0.1s</string>
+    <string name="external_subtitle_later">延后 0.1s</string>
     <string name="external_subtitle_setup">搜索无需登录。下载请在 设置 → 数据源与播放 → 播放器 → OpenSubtitles 中填写账号密码或 API Key</string>
     <string name="external_subtitle_query">片名</string>
     <string name="external_subtitle_season">季（可选）</string>

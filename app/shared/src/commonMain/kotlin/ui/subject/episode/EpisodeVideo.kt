@@ -69,6 +69,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import me.him188.ani.app.data.models.preference.DarkMode
+import me.him188.ani.app.data.models.preference.SubtitleStyle
 import me.him188.ani.app.data.models.preference.SubtitleTextConversion
 import me.him188.ani.app.data.models.preference.VideoScaffoldConfig
 import me.him188.ani.app.domain.media.cache.engine.MediaCacheEngineKey
@@ -139,6 +140,7 @@ import me.him188.ani.app.ui.watchtogether.LocalWatchTogetherPlayerController
 import me.him188.ani.app.videoplayer.subtitle.ExternalSubtitleController
 import me.him188.ani.app.videoplayer.subtitle.ExternalSubtitleOverlay
 import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleAppearance
+import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleDelayMillis
 import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleTextConversion
 import me.him188.ani.app.videoplayer.subtitle.SubtitleAppearance
 import me.him188.ani.app.videoplayer.ui.ControllerVisibility
@@ -234,6 +236,8 @@ internal fun EpisodeVideoImpl(
     onSubtitleTextConversionChange: (SubtitleTextConversion) -> Unit = {},
     subtitleFontScale: Float = 1f,
     onSubtitleFontScaleChange: ((Float) -> Unit)? = null,
+    subtitleStyle: SubtitleStyle = SubtitleStyle.Default,
+    onSubtitleStyleChange: (SubtitleStyle) -> Unit = {},
     externalSubtitles: ExternalSubtitleController? = null,
     onOpenExternalSubtitles: (() -> Unit)? = null,
     onClickSkipOpEd: (currentPositionMillis: Long) -> Unit = {
@@ -328,6 +332,9 @@ internal fun EpisodeVideoImpl(
                 onSubtitleTextConversionChange = onSubtitleTextConversionChange,
                 subtitleFontScale = subtitleFontScale,
                 onSubtitleFontScaleChange = onSubtitleFontScaleChange,
+                subtitleStyle = subtitleStyle,
+                onSubtitleStyleChange = onSubtitleStyleChange,
+                externalSubtitles = externalSubtitles,
                 onOpenExternalSubtitles = onOpenExternalSubtitles,
                 expanded = expanded,
                 opEdSkipDuration = opEdSkipDuration,
@@ -389,7 +396,8 @@ internal fun EpisodeVideoImpl(
                     Text(previewModeText)
                 } else {
                     CompositionLocalProvider(
-                        LocalSubtitleAppearance provides SubtitleAppearance(subtitleFontScale),
+                        LocalSubtitleAppearance provides SubtitleAppearance(subtitleFontScale, subtitleStyle),
+                        LocalSubtitleDelayMillis provides (externalSubtitles?.offsetMillis?.collectAsState()?.value ?: 0L),
                         LocalSubtitleTextConversion provides subtitleTextConversion,
                     ) {
                         VideoPlayer(
@@ -714,6 +722,9 @@ internal fun EpisodeVideoTopBarActions(
     onSubtitleTextConversionChange: (SubtitleTextConversion) -> Unit = {},
     subtitleFontScale: Float,
     onSubtitleFontScaleChange: ((Float) -> Unit)?,
+    subtitleStyle: SubtitleStyle = SubtitleStyle.Default,
+    onSubtitleStyleChange: (SubtitleStyle) -> Unit = {},
+    externalSubtitles: ExternalSubtitleController? = null,
     expanded: Boolean,
     opEdSkipDuration: Duration,
     onClickSkipOpEd: (currentPositionMillis: Long) -> Unit,
@@ -963,6 +974,10 @@ internal fun EpisodeVideoTopBarActions(
             onDismissRequest = { showSubtitleSettings = false },
             textConversion = subtitleTextConversion,
             onTextConversionChange = onSubtitleTextConversionChange,
+            style = subtitleStyle,
+            onStyleChange = onSubtitleStyleChange,
+            delayMillis = externalSubtitles?.offsetMillis?.collectAsState()?.value ?: 0L,
+            onDelayChange = externalSubtitles?.let { controller -> { controller.offsetMillis.value = it } },
         )
     }
 

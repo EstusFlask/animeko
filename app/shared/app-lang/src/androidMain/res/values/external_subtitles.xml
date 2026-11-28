@@ -4,8 +4,8 @@
     <string name="external_subtitle_import">Import local subtitles</string>
     <string name="external_subtitle_formats">SRT / WebVTT / ASS / SSA, UTF-8 or UTF-16 text</string>
     <string name="external_subtitle_off">Turn off external subtitles</string>
-    <string name="external_subtitle_earlier">Earlier 0.5s</string>
-    <string name="external_subtitle_later">Later 0.5s</string>
+    <string name="external_subtitle_earlier">Earlier 0.1s</string>
+    <string name="external_subtitle_later">Later 0.1s</string>
     <string name="external_subtitle_setup">Search works anonymously. To download, enter an account or API key in Settings → Data sources and playback → Player → OpenSubtitles.</string>
     <string name="external_subtitle_query">Title</string>
     <string name="external_subtitle_season">Season (optional)</string>

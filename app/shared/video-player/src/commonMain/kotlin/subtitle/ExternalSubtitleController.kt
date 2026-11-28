@@ -49,6 +49,14 @@ class ExternalSubtitleController(private val player: MediampPlayer, scope: Corou
     private val _selected = MutableStateFlow<ExternalSubtitle?>(null)
     val selected = _selected.asStateFlow()
     val offsetMillis = MutableStateFlow(0L)
+    private val trackOffsets = mutableMapOf<String, Long>()
+    private var offsetTrackId: String? = nativeTracks?.selected?.value?.id
+
+    private fun selectOffset(trackId: String?) {
+        offsetTrackId?.let { trackOffsets[it] = offsetMillis.value.coerceIn(-600_000, 600_000) }
+        offsetTrackId = trackId
+        offsetMillis.value = trackId?.let { trackOffsets[it] } ?: 0L
+    }
     private val _text = MutableStateFlow("")
     val text = _text.asStateFlow()
 
@@ -65,12 +73,14 @@ class ExternalSubtitleController(private val player: MediampPlayer, scope: Corou
             val external = track?.let { candidate -> imported.value.find { it.track.id == candidate.id } }
             if (external != null) {
                 if (external.media !== player.mediaData.value) return false
+                selectOffset(track.id)
                 nativeTracks?.select(null)
                 _selected.value = external
                 return true
             }
             if (track?.id?.startsWith("ani-external-") == true) return false
             if (track != null && nativeTracks?.select(track) != true) return false
+            selectOffset(track?.id)
             if (track == null) nativeTracks?.select(null)
             clear()
             return true
@@ -79,10 +89,14 @@ class ExternalSubtitleController(private val player: MediampPlayer, scope: Corou
 
     init {
         scope.launch(player.mainDispatcher) {
+            var previous: MediaData? = player.mediaData.value
             player.mediaData.collectLatest { current ->
-                if (imported.value.any { it.media !== current }) {
+                if (previous !== current) {
+                    previous = current
                     imported.value = emptyList()
                     clear()
+                    trackOffsets.clear()
+                    offsetTrackId = nativeTracks?.selected?.value?.id
                     offsetMillis.value = 0
                 }
             }
@@ -92,7 +106,12 @@ class ExternalSubtitleController(private val player: MediampPlayer, scope: Corou
         }.distinctUntilChanged().onEach { _text.value = it }
             .launchIn(mainScope)
         scope.launch(player.mainDispatcher) {
-            player.subtitleTracks?.selected?.collect { if (it != null) clear() }
+            player.subtitleTracks?.selected?.collect {
+                if (it != null) {
+                    if (offsetTrackId != it.id) selectOffset(it.id)
+                    clear()
+                }
+            }
         }
     }
 
@@ -104,8 +123,8 @@ class ExternalSubtitleController(private val player: MediampPlayer, scope: Corou
         return withContext(player.mainDispatcher) {
             if (player.mediaData.value !== expectedMedia) return@withContext false
             nativeTracks?.select(null)
-            offsetMillis.value = 0
             val id = "ani-external-${nextId++}"
+            selectOffset(id)
             val subtitle = ExternalSubtitle(
                 name, SubtitleCueTimeline(cues), expectedMedia,
                 SubtitleTrack(id, id, null, listOf(TrackLabel(null, name))),

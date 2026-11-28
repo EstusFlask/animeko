@@ -17,8 +17,8 @@ import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,12 +37,13 @@ import me.him188.ani.app.data.models.preference.SubtitleTextConversion
 import me.him188.ani.app.ui.foundation.LocalIsPreviewing
 import me.him188.ani.app.videoplayer.media.LibassExoPlayerMediampPlayer
 import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleAppearance
+import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleDelayMillis
 import me.him188.ani.app.videoplayer.subtitle.LocalSubtitleTextConversion
 import me.him188.ani.app.videoplayer.subtitle.SubtitleTextOverlay
 import org.openani.mediamp.MediampPlayer
-import org.openani.mediamp.features.subtitleTracks
 import org.openani.mediamp.exoplayer.ExoPlayerMediampPlayer
 import org.openani.mediamp.exoplayer.compose.ExoPlayerMediampPlayerSurface
+import org.openani.mediamp.features.subtitleTracks
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -61,24 +62,27 @@ actual fun VideoPlayer(
         var text by remember(player) { mutableStateOf("") }
         val conversion = LocalSubtitleTextConversion.current
         val selectedSubtitle = player.subtitleTracks?.selected?.collectAsState()?.value
-        val scale = LocalSubtitleAppearance.current.effectiveFontScale
-        LaunchedEffect(nativeSubtitleView, conversion, scale, selectedSubtitle) {
+        val appearance = LocalSubtitleAppearance.current
+        val scale = appearance.effectiveFontScale
+        val subtitleDelay = LocalSubtitleDelayMillis.current
+        LaunchedEffect(libassPlayer, subtitleDelay, selectedSubtitle) { libassPlayer?.setSubtitleDelay(if (selectedSubtitle == null) 0 else subtitleDelay) }
+        LaunchedEffect(nativeSubtitleView, conversion, scale, selectedSubtitle, appearance.requiresTextOverlay, subtitleDelay) {
             text = ""
             val view = nativeSubtitleView ?: return@LaunchedEffect
             try {
                 view.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * scale)
                 libassPlayer?.assHandler?.render?.setFontScale(scale)
-                if (conversion == SubtitleTextConversion.ORIGINAL) return@LaunchedEffect
+                if (conversion == SubtitleTextConversion.ORIGINAL && !appearance.requiresTextOverlay) return@LaunchedEffect
                 while (isActive) {
                     val exo = exoPlayer.impl
                     val selected = exo.currentTracks.groups.firstOrNull { it.type == C.TRACK_TYPE_TEXT && it.isSelected }
                     val mime = selected?.mediaTrackGroup?.getFormat(0)?.sampleMimeType
                     val cues = exo.currentCues.cues
                     val bitmap = mime in bitmapSubtitleMimeTypes || cues.any { it.bitmap != null }
-                    val active = conversion != SubtitleTextConversion.ORIGINAL && selected != null && !bitmap
+                    val active = selected != null && !bitmap
                     view.visibility = if (active) View.INVISIBLE else View.VISIBLE
                     text = if (!active) "" else if (mime == "text/x-ssa") {
-                        val position = exo.currentPosition
+                        val position = exo.currentPosition - subtitleDelay
                         libassPlayer?.assHandler?.track?.getEvents().orEmpty().filter {
                             position >= it.start && position < it.start + it.duration
                         }.map { it.text }.filterNot { Regex("""\\p[1-9]""").containsMatchIn(it) }

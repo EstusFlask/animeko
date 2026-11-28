@@ -151,8 +151,8 @@ internal fun ExternalSubtitlesDialog(
                     Text(it.name, maxLines = 2)
                     TextButton(onClick = { controller.clear() }) { Text(stringResource(Lang.external_subtitle_off)) }
                     Row {
-                        TextButton(onClick = { controller.offsetMillis.value = (offset - 500).coerceAtLeast(-600_000) }) { Text(stringResource(Lang.external_subtitle_earlier)) }
-                        TextButton(onClick = { controller.offsetMillis.value = (offset + 500).coerceAtMost(600_000) }) { Text(stringResource(Lang.external_subtitle_later)) }
+                        TextButton(onClick = { controller.offsetMillis.value = (offset - 100).coerceAtLeast(-600_000) }) { Text(stringResource(Lang.external_subtitle_earlier)) }
+                        TextButton(onClick = { controller.offsetMillis.value = (offset + 100).coerceAtMost(600_000) }) { Text(stringResource(Lang.external_subtitle_later)) }
                     }
                     Text(stringResource(Lang.external_subtitle_offset, (offset / 1000.0).toString()))
                 }

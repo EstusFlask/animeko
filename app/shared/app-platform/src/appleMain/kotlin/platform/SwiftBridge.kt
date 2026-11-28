@@ -22,6 +22,7 @@ interface ISwiftBridge {
     fun releaseEnhancedPlayerView(view: UIView)
     /** 提供当前所选原生文本字幕，capture 为 true 时文本由应用字幕层显示。 */
     fun setPlayerSubtitleCapture(view: UIView, capture: Boolean, onText: (String) -> Unit)
+    fun setPlayerSubtitleDelay(view: UIView, delayMillis: Long)
 
     val UIViewController.navigationController: UINavigationController?
 

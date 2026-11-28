@@ -46,6 +46,16 @@ class MpvSubtitleReaderTest {
                     assertEquals("軟件與網絡\nHello", SubtitleTextConverter().convert(original, SubtitleTextConversion.TRADITIONAL))
                     assertEquals("", reader.read(false))
                     assertTrue(handle.getPropertyBoolean("sub-visibility"))
+                    assertTrue(handle.setPropertyDouble("sub-delay", 2.0))
+                    assertTrue(handle.command("seek", "1", "absolute+exact"))
+                    waitUntil { reader.read(true).isEmpty() }
+                    assertTrue(handle.command("seek", "3", "absolute+exact"))
+                    waitUntil { reader.read(true).contains("软件與網絡") }
+                    assertTrue(handle.setPropertyDouble("sub-delay", -2.0))
+                    assertTrue(handle.command("seek", "3", "absolute+exact"))
+                    waitUntil { reader.read(true).isEmpty() }
+                    assertTrue(handle.command("seek", "1", "absolute+exact"))
+                    waitUntil { reader.read(true).contains("软件與網絡") }
                     assertTrue(handle.setPropertyString("sid", "no"))
                     waitUntil { reader.read(true).isEmpty() }
                 }

@@ -253,6 +253,7 @@ import org.openani.mediamp.metadata.Chapter
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import me.him188.ani.app.data.models.preference.SubtitleStyle
 
 
 private const val OP_ED_AUTO_SKIP_BASE_SAMPLE_INTERVAL_MILLIS = 1_000L
@@ -592,6 +593,12 @@ open class EpisodeViewModel(
         if (!scale.isFinite()) return
         launchInBackground {
             settingsRepository.videoScaffoldConfig.update { copy(subtitleFontScale = SubtitleAppearance(scale).effectiveFontScale) }
+        }
+    }
+
+    fun setSubtitleStyle(style: SubtitleStyle) {
+        launchInBackground {
+            settingsRepository.videoScaffoldConfig.update { copy(subtitleStyle = style.normalized()) }
         }
     }
 
