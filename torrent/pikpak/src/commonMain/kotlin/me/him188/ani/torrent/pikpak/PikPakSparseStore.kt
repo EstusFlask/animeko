@@ -50,9 +50,10 @@ import kotlin.time.Duration.Companion.seconds
  * One file of a torrent on disk, as the SDK's file cache keeps it: the data file at its real
  * offsets, and a bitmap of which blocks hold real bytes.
  *
- * Everything the cache fetches is offered here, playback included, so a download skips blocks
- * already fetched by playback. The entry removes unkept data when its session closes. What a
- * download asks for is written here and awaited ([DurableBlockStore]).
+ * Everything the cache fetches is offered here, playback included, so an episode watched without
+ * being cached still leaves what was played on disk until the cache engine's startup pruning
+ * removes the directory; a later download skips it. What a download asks for is written here and
+ * awaited ([DurableBlockStore]).
  *
  * The data file grows as blocks land, never preallocated: preallocating would put a whole episode
  * on disk for the first block a player reads. On the JVM it is created sparse, which matters on
@@ -143,21 +144,24 @@ internal class PikPakSparseStore(
         if (isHeld(block)) return
         withContext(Dispatchers.IO_) {
             ioMutex.withLock {
-                if (isHeld(block)) return@withLock
                 val opened = openHandle()
                 opened.seek(offset)
                 opened.write(bytes, 0, bytes.size)
                 // Held from here on: other handles on the file read these bytes back. Durability
                 // rides the persist cadence.
                 opened.flush()
-                // Publish under the I/O lock so cancellation cannot hide flushed bytes from
-                // close, and a persist cannot flush their bitmap before their data is synced.
-                synchronized(lock) { held[block] = true }
-                bitmap.set(block)
-                _heldBytes.update { it + lengthOf(block) }
-                onHeld(block)
             }
         }
+        val added = synchronized(lock) {
+            if (held[block]) false else {
+                held[block] = true
+                true
+            }
+        }
+        if (!added) return
+        bitmap.set(block)
+        _heldBytes.update { it + lengthOf(block) }
+        onHeld(block)
     }
 
     override suspend fun missing(file: String, ranges: List<LongRange>): List<LongRange> {
