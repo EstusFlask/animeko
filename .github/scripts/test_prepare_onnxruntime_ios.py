@@ -71,7 +71,7 @@ class PrepareOnnxruntimeIosTests(unittest.TestCase):
         self.digest_patch.start()
         self.addCleanup(self.digest_patch.stop)
 
-    def test_prepares_cloneable_specs_with_verified_local_archives_and_both_slices(self):
+    def assert_prepared_specs_clone_and_archive_contents(self):
         self.package_fixture()
         repo = module.prepare_specs(self.package, self.source, self.root / "prepared")
         clone = self.root / "clone"
@@ -84,7 +84,7 @@ class PrepareOnnxruntimeIosTests(unittest.TestCase):
             spec = json.loads((clone / "Specs" / name / module.VERSION / f"{name}.podspec.json").read_text())
             self.assertEqual(module.VERSION, spec["version"])
             archive = self.root / "prepared/archives" / f"{name}-{module.VERSION}.zip"
-            self.assertEqual(archive.as_uri(), spec["source"]["http"])
+            self.assertEqual(archive.resolve().as_uri(), spec["source"]["http"])
             self.assertEqual(hashlib.sha256(archive.read_bytes()).hexdigest(), spec["source"]["sha256"])
             with zipfile.ZipFile(archive) as contents:
                 if name == "onnxruntime-c":
@@ -104,6 +104,22 @@ class PrepareOnnxruntimeIosTests(unittest.TestCase):
         for spec in specs.values():
             for dependency in dependencies(spec):
                 self.assertIn(dependency.split("/")[0], specs)
+
+    def test_prepares_cloneable_specs_with_verified_local_archives_and_both_slices(self):
+        self.assert_prepared_specs_clone_and_archive_contents()
+
+    def test_prepares_cloneable_specs_through_a_directory_alias(self):
+        target = self.root / "physical"
+        target.mkdir()
+        alias = self.root / "alias"
+        if sys.platform == "win32":
+            import _winapi
+            _winapi.CreateJunction(str(target), str(alias))
+        else:
+            alias.symlink_to(target, target_is_directory=True)
+        self.assertNotEqual(alias.absolute(), alias.resolve())
+        self.root = alias
+        self.assert_prepared_specs_clone_and_archive_contents()
 
     def test_rejects_modified_sentry_podspec(self):
         self.package_fixture()
