@@ -15,7 +15,26 @@ pluginManagement {
     // 约定插件来自 build-logic; 必须在 settings 里 includeBuild, plugins {} 才解析得到 `ani.*`.
     includeBuild("build-logic")
 
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id in setOf(
+                    "com.android.application",
+                    "com.android.library",
+                    "com.android.kotlin.multiplatform.library",
+                ) && requested.version != null) {
+                useModule("com.android.tools.build:gradle:${requested.version}")
+            }
+        }
+    }
+
     repositories {
+        google {
+            content {
+                includeGroupByRegex("com\\.android(\\..*)?")
+                includeGroupByRegex("com\\.google(\\..*)?")
+                includeGroupByRegex("androidx(\\..*)?")
+            }
+        }
         if (System.getenv("CI") == "true") {
             maven("https://maven-central.storage-download.googleapis.com/maven2/") {
                 name = "CiMavenCentral"
@@ -23,7 +42,6 @@ pluginManagement {
         }
         gradlePluginPortal()
         mavenCentral()
-        google()
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev") // Compose Multiplatform pre-release versions
     }
 }
@@ -33,6 +51,13 @@ dependencyResolutionManagement {
     repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
     @Suppress("UnstableApiUsage")
     repositories {
+        google {
+            content {
+                includeGroupByRegex("com\\.android(\\..*)?")
+                includeGroupByRegex("com\\.google(\\..*)?")
+                includeGroupByRegex("androidx(\\..*)?")
+            }
+        }
         if (System.getenv("CI") == "true") {
             maven("https://maven-central.storage-download.googleapis.com/maven2/") {
                 name = "CiMavenCentral"
@@ -40,7 +65,6 @@ dependencyResolutionManagement {
         }
         // mavenLocal 的位置不能动: 本地 mediamp / anitorrent 调试构建依赖它排在这里.
         mavenCentral()
-        google()
         mavenLocal()
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
         maven("https://androidx.dev/storage/compose-compiler/repository/")
