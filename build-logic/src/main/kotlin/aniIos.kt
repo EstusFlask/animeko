@@ -15,7 +15,6 @@ import org.gradle.kotlin.dsl.register
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.cocoapods.CocoapodsExtension
 import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType
-import org.jetbrains.kotlin.gradle.targets.native.tasks.PodGenTask
 
 /** Kotlin/Native 不会把 commonTest resources 带进测试 bundle: https://developer.squareup.com/blog/kotlin-multiplatform-shared-test-resources/ */
 fun Project.configureAniIosTestResources() {
@@ -48,20 +47,6 @@ fun Project.configureAniCocoapods() {
             // Maps custom Xcode configuration to NativeBuildType
             xcodeConfigurationToNativeBuildType["CUSTOM_DEBUG"] = NativeBuildType.DEBUG
             xcodeConfigurationToNativeBuildType["CUSTOM_RELEASE"] = NativeBuildType.RELEASE
-        }
-    }
-}
-
-/** Resolves synthetic CocoaPods dependencies exclusively from the prepared spec repository. */
-fun Project.usePreparedCocoaPodsSpecRepository(repository: String) {
-    tasks.withType(PodGenTask::class.java).configureEach {
-        val syntheticPodfile = podfile
-        doLast {
-            val file = syntheticPodfile.get()
-            val source = "source '$repository'\n"
-            val content = file.readText()
-            check(source in content) { "Prepared CocoaPods repository is missing from $file" }
-            file.writeText(source + content.lineSequence().filterNot { it.startsWith("source ") }.joinToString("\n"))
         }
     }
 }

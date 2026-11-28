@@ -21,14 +21,8 @@ jobs:
     - id: 'step-1'
       run: 'pip3 install PyYAML'
     - id: 'step-2'
-      name: 'Test dependency download retries'
-      run: 'python3 -B -m unittest discover -s ci-helper -p test_run_gradle_with_retry.py'
-    - id: 'step-3'
-      name: 'Test Android test runner budgets'
-      run: 'python3 -B -m unittest discover -s ci-helper -p test_android_test_workflow.py'
-    - id: 'step-4'
       run: 'cp ".github/workflows/release.yml" ".github/workflows/release.yml-check.yml" '
-    - id: 'step-5'
+    - id: 'step-3'
       run: |-
         for attempt in 1 2 3; do
           if .github/workflows/src.main.kts; then exit 0; fi
@@ -37,7 +31,7 @@ jobs:
           sleep 30
         done
         exit 1
-    - id: 'step-6'
+    - id: 'step-4'
       run: 'python .github/workflows/check_yaml_equivalence.py .github/workflows/release.yml .github/workflows/release.yml-check.yml'
   create-release:
     name: 'Create Release'
@@ -176,12 +170,12 @@ jobs:
       name: 'Clean and download dependencies (Attempt #1)'
       continue-on-error: true
       timeout-minutes: 180
-      run: 'python ci-helper/run-gradle-with-retry.py --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" "-DBoost_INCLUDE_DIR=C:/vcpkg/installed/x64-windows/include" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx4g" "-Dkotlin.daemon.jvm.options=-Xmx4g" "--parallel"'
+      run: './gradlew --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" "-DBoost_INCLUDE_DIR=C:/vcpkg/installed/x64-windows/include" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx4g" "-Dkotlin.daemon.jvm.options=-Xmx4g" "--parallel"'
     - id: 'step-11'
       name: 'Clean and download dependencies (Attempt #2)'
       continue-on-error: false
       timeout-minutes: 180
-      run: 'python ci-helper/run-gradle-with-retry.py --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" "-DBoost_INCLUDE_DIR=C:/vcpkg/installed/x64-windows/include" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx4g" "-Dkotlin.daemon.jvm.options=-Xmx4g" "--parallel"'
+      run: './gradlew --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" "-DBoost_INCLUDE_DIR=C:/vcpkg/installed/x64-windows/include" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx4g" "-Dkotlin.daemon.jvm.options=-Xmx4g" "--parallel"'
       if: '${{ steps.step-10.outcome == ''failure'' }}'
     - id: 'step-12'
       name: 'Update Release Version Name (Attempt #1)'
@@ -375,12 +369,12 @@ jobs:
       name: 'Clean and download dependencies (Attempt #1)'
       continue-on-error: true
       timeout-minutes: 180
-      run: 'python ci-helper/run-gradle-with-retry.py --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx4g" "-Dkotlin.daemon.jvm.options=-Xmx4g" "--parallel" "--no-configuration-cache"'
+      run: './gradlew --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx4g" "-Dkotlin.daemon.jvm.options=-Xmx4g" "--parallel" "--no-configuration-cache"'
     - id: 'step-12'
       name: 'Clean and download dependencies (Attempt #2)'
       continue-on-error: false
       timeout-minutes: 180
-      run: 'python ci-helper/run-gradle-with-retry.py --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx4g" "-Dkotlin.daemon.jvm.options=-Xmx4g" "--parallel" "--no-configuration-cache"'
+      run: './gradlew --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx4g" "-Dkotlin.daemon.jvm.options=-Xmx4g" "--parallel" "--no-configuration-cache"'
       if: '${{ steps.step-11.outcome == ''failure'' }}'
     - id: 'step-13'
       name: 'Update Release Version Name (Attempt #1)'
@@ -655,12 +649,12 @@ jobs:
       name: 'Clean and download dependencies (Attempt #1)'
       continue-on-error: true
       timeout-minutes: 180
-      run: 'python3 ci-helper/run-gradle-with-retry.py --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx12g -Dkotlin.daemon.jvm.options=-Xmx20g" "-Dkotlin.daemon.jvm.options=-Xmx20g" "--parallel"'
+      run: './gradlew --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx12g -Dkotlin.daemon.jvm.options=-Xmx20g" "-Dkotlin.daemon.jvm.options=-Xmx20g" "--parallel"'
     - id: 'step-16'
       name: 'Clean and download dependencies (Attempt #2)'
       continue-on-error: false
       timeout-minutes: 180
-      run: 'python3 ci-helper/run-gradle-with-retry.py --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx12g -Dkotlin.daemon.jvm.options=-Xmx20g" "-Dkotlin.daemon.jvm.options=-Xmx20g" "--parallel"'
+      run: './gradlew --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx12g -Dkotlin.daemon.jvm.options=-Xmx20g" "-Dkotlin.daemon.jvm.options=-Xmx20g" "--parallel"'
       if: '${{ steps.step-15.outcome == ''failure'' }}'
     - id: 'step-17'
       name: 'Update Release Version Name (Attempt #1)'
@@ -1221,12 +1215,12 @@ jobs:
       name: 'Clean and download dependencies (Attempt #1)'
       continue-on-error: true
       timeout-minutes: 180
-      run: 'python3 ci-helper/run-gradle-with-retry.py --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx4g" "-Dkotlin.daemon.jvm.options=-Xmx4g"'
+      run: './gradlew --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx4g" "-Dkotlin.daemon.jvm.options=-Xmx4g"'
     - id: 'step-15'
       name: 'Clean and download dependencies (Attempt #2)'
       continue-on-error: false
       timeout-minutes: 180
-      run: 'python3 ci-helper/run-gradle-with-retry.py --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx4g" "-Dkotlin.daemon.jvm.options=-Xmx4g"'
+      run: './gradlew --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx4g" "-Dkotlin.daemon.jvm.options=-Xmx4g"'
       if: '${{ steps.step-14.outcome == ''failure'' }}'
     - id: 'step-16'
       name: 'Update Release Version Name (Attempt #1)'
@@ -1476,12 +1470,12 @@ jobs:
       name: 'Clean and download dependencies (Attempt #1)'
       continue-on-error: true
       timeout-minutes: 180
-      run: 'python3 ci-helper/run-gradle-with-retry.py --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx6g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
+      run: './gradlew --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx6g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
     - id: 'step-15'
       name: 'Clean and download dependencies (Attempt #2)'
       continue-on-error: false
       timeout-minutes: 180
-      run: 'python3 ci-helper/run-gradle-with-retry.py --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx6g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
+      run: './gradlew --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx6g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-14.outcome == ''failure'' }}'
     - id: 'step-16'
       name: 'Update Release Version Name (Attempt #1)'
@@ -1674,12 +1668,12 @@ jobs:
       name: 'Clean and download dependencies (Attempt #1)'
       continue-on-error: true
       timeout-minutes: 180
-      run: 'python3 ci-helper/run-gradle-with-retry.py --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
     - id: 'step-14'
       name: 'Clean and download dependencies (Attempt #2)'
       continue-on-error: false
       timeout-minutes: 180
-      run: 'python3 ci-helper/run-gradle-with-retry.py --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew --scan "--stacktrace" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-13.outcome == ''failure'' }}'
     - id: 'step-15'
       name: 'Update Release Version Name (Attempt #1)'
@@ -1690,7 +1684,7 @@ jobs:
         CI_TAG: '${{ steps.step-1.outputs.tag }}'
       continue-on-error: true
       timeout-minutes: 180
-      run: './gradlew updateReleaseVersionNameFromGit "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew updateReleaseVersionNameFromGit "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
     - id: 'step-16'
       name: 'Update Release Version Name (Attempt #2)'
       env:
@@ -1700,7 +1694,7 @@ jobs:
         CI_TAG: '${{ steps.step-1.outputs.tag }}'
       continue-on-error: false
       timeout-minutes: 180
-      run: './gradlew updateReleaseVersionNameFromGit "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew updateReleaseVersionNameFromGit "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-15.outcome == ''failure'' }}'
     - id: 'step-17'
       name: 'Prepare signing key'
@@ -1750,45 +1744,45 @@ jobs:
       name: 'Compile Kotlin (Attempt #1)'
       continue-on-error: true
       timeout-minutes: 180
-      run: './gradlew compileKotlin compileCommonMainKotlinMetadata compileJvmMainKotlinMetadata compileKotlinDesktop compileKotlinMetadata "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew compileKotlin compileCommonMainKotlinMetadata compileJvmMainKotlinMetadata compileKotlinDesktop compileKotlinMetadata "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
     - id: 'step-20'
       name: 'Compile Kotlin (Attempt #2)'
       continue-on-error: false
       timeout-minutes: 180
-      run: './gradlew compileKotlin compileCommonMainKotlinMetadata compileJvmMainKotlinMetadata compileKotlinDesktop compileKotlinMetadata "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew compileKotlin compileCommonMainKotlinMetadata compileJvmMainKotlinMetadata compileKotlinDesktop compileKotlinMetadata "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-19.outcome == ''failure'' }}'
     - id: 'step-21'
       name: 'Compile Kotlin Android (Attempt #1)'
       continue-on-error: true
       timeout-minutes: 180
-      run: './gradlew compileDefaultDebugKotlin compileDefaultReleaseKotlin "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew compileDefaultDebugKotlin compileDefaultReleaseKotlin "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
     - id: 'step-22'
       name: 'Compile Kotlin Android (Attempt #2)'
       continue-on-error: false
       timeout-minutes: 180
-      run: './gradlew compileDefaultDebugKotlin compileDefaultReleaseKotlin "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew compileDefaultDebugKotlin compileDefaultReleaseKotlin "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-21.outcome == ''failure'' }}'
     - id: 'step-23'
       name: 'Build Android Debug APKs (Attempt #1)'
       continue-on-error: true
       timeout-minutes: 180
-      run: './gradlew assembleDefaultDebug assembleTvDebug "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew assembleDefaultDebug assembleTvDebug "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
     - id: 'step-24'
       name: 'Build Android Debug APKs (Attempt #2)'
       continue-on-error: false
       timeout-minutes: 180
-      run: './gradlew assembleDefaultDebug assembleTvDebug "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew assembleDefaultDebug assembleTvDebug "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-23.outcome == ''failure'' }}'
     - id: 'step-25'
       name: 'Test Android TV (Attempt #1)'
       continue-on-error: true
       timeout-minutes: 180
-      run: './gradlew :app:shared:tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' :app:shared:ui-foundation-tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' :app:shared:ui-episode-tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' :app:shared:ui-subject-tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew :app:shared:tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' :app:shared:ui-foundation-tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' :app:shared:ui-episode-tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' :app:shared:ui-subject-tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
     - id: 'step-26'
       name: 'Test Android TV (Attempt #2)'
       continue-on-error: false
       timeout-minutes: 180
-      run: './gradlew :app:shared:tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' :app:shared:ui-foundation-tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' :app:shared:ui-episode-tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' :app:shared:ui-subject-tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew :app:shared:tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' :app:shared:ui-foundation-tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' :app:shared:ui-episode-tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' :app:shared:ui-subject-tv:testAndroidHostTest --tests ''me.him188.ani.tv.*'' "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-25.outcome == ''failure'' }}'
     - id: 'step-27'
       name: 'Prepare ani-android-arm64-v8a-debug.apk'
@@ -1955,7 +1949,7 @@ jobs:
         signing_release_keyPassword: '${{ secrets.SIGNING_RELEASE_KEYPASSWORD }}'
       continue-on-error: true
       timeout-minutes: 180
-      run: './gradlew assembleDefaultRelease assembleTvRelease "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew assembleDefaultRelease assembleTvRelease "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ (github.repository == ''open-ani/animeko'') && ((!(github.event_name == ''pull_request'')) || (github.event.pull_request.head.repo.full_name == github.repository)) }}'
     - id: 'step-44'
       name: 'Build Android Release APKs (Attempt #2)'
@@ -1966,7 +1960,7 @@ jobs:
         signing_release_keyPassword: '${{ secrets.SIGNING_RELEASE_KEYPASSWORD }}'
       continue-on-error: false
       timeout-minutes: 180
-      run: './gradlew assembleDefaultRelease assembleTvRelease "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew assembleDefaultRelease assembleTvRelease "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-43.outcome == ''failure'' }}'
     - id: 'step-45'
       name: 'Prepare ani-android-arm64-v8a-release.apk'
@@ -2302,7 +2296,7 @@ jobs:
         APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD: '${{ secrets.APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD }}'
       continue-on-error: true
       timeout-minutes: 180
-      run: './gradlew :ci-helper:uploadAndroidApk "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew :ci-helper:uploadAndroidApk "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
     - id: 'step-78'
       name: 'Upload Android APK for Release (Attempt #2)'
       env:
@@ -2325,7 +2319,7 @@ jobs:
         APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD: '${{ secrets.APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD }}'
       continue-on-error: false
       timeout-minutes: 180
-      run: './gradlew :ci-helper:uploadAndroidApk "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew :ci-helper:uploadAndroidApk "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-77.outcome == ''failure'' }}'
     - id: 'step-79'
       name: 'Upload Android TV APK for Release (Attempt #1)'
@@ -2349,7 +2343,7 @@ jobs:
         APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD: '${{ secrets.APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD }}'
       continue-on-error: true
       timeout-minutes: 180
-      run: './gradlew :ci-helper:uploadAndroidTvApk "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew :ci-helper:uploadAndroidTvApk "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
     - id: 'step-80'
       name: 'Upload Android TV APK for Release (Attempt #2)'
       env:
@@ -2372,7 +2366,7 @@ jobs:
         APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD: '${{ secrets.APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD }}'
       continue-on-error: false
       timeout-minutes: 180
-      run: './gradlew :ci-helper:uploadAndroidTvApk "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew :ci-helper:uploadAndroidTvApk "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-79.outcome == ''failure'' }}'
     - id: 'step-81'
       name: 'Generate QR code for APK (GitHub)'
@@ -2408,7 +2402,7 @@ jobs:
         APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD: '${{ secrets.APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD }}'
       continue-on-error: true
       timeout-minutes: 180
-      run: './gradlew :ci-helper:uploadAndroidApkQR "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew :ci-helper:uploadAndroidApkQR "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
     - id: 'step-84'
       name: 'Upload QR code (Attempt #2)'
       env:
@@ -2431,7 +2425,7 @@ jobs:
         APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD: '${{ secrets.APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD }}'
       continue-on-error: false
       timeout-minutes: 180
-      run: './gradlew :ci-helper:uploadAndroidApkQR "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew :ci-helper:uploadAndroidApkQR "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-83.outcome == ''failure'' }}'
     - id: 'step-85'
       name: 'Generate QR code for iOS (GitHub)'
@@ -2467,7 +2461,7 @@ jobs:
         APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD: '${{ secrets.APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD }}'
       continue-on-error: true
       timeout-minutes: 180
-      run: './gradlew :ci-helper:uploadIosIpaQR "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew :ci-helper:uploadIosIpaQR "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
     - id: 'step-88'
       name: 'Upload QR code (Attempt #2)'
       env:
@@ -2490,7 +2484,7 @@ jobs:
         APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD: '${{ secrets.APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD }}'
       continue-on-error: false
       timeout-minutes: 180
-      run: './gradlew :ci-helper:uploadIosIpaQR "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew :ci-helper:uploadIosIpaQR "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-87.outcome == ''failure'' }}'
     - id: 'step-89'
       name: 'Install patchelf'
@@ -2499,12 +2493,12 @@ jobs:
       name: 'Package Desktop (Attempt #1)'
       continue-on-error: true
       timeout-minutes: 180
-      run: './gradlew createReleaseDistributable "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew createReleaseDistributable "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
     - id: 'step-91'
       name: 'Package Desktop (Attempt #2)'
       continue-on-error: false
       timeout-minutes: 180
-      run: './gradlew createReleaseDistributable "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew createReleaseDistributable "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-90.outcome == ''failure'' }}'
     - id: 'step-92'
       name: 'Upload compose logs'
@@ -2625,7 +2619,7 @@ jobs:
         APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD: '${{ secrets.APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD }}'
       continue-on-error: true
       timeout-minutes: 180
-      run: './gradlew :ci-helper:uploadDesktopInstallers "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew :ci-helper:uploadDesktopInstallers "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
     - id: 'step-99'
       name: 'Upload Desktop Installers (Attempt #2)'
       env:
@@ -2648,7 +2642,7 @@ jobs:
         APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD: '${{ secrets.APPLE_DISTRIBUTION_PRIVATE_KEY_PFX_IMPORT_PWD }}'
       continue-on-error: false
       timeout-minutes: 180
-      run: './gradlew :ci-helper:uploadDesktopInstallers "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.daemon.jvm.options=-Xmx3g" "-Dkotlin.daemon.jvm.options=-Xmx3g" "--max-workers=2"'
+      run: './gradlew :ci-helper:uploadDesktopInstallers "--no-configuration-cache" "--scan" "-Porg.gradle.daemon.idletimeout=60000" "-Dfile.encoding=UTF-8" "-Dorg.gradle.jvmargs=-Xmx8g -Dkotlin.daemon.jvm.options=-Xmx6g" "-Dkotlin.daemon.jvm.options=-Xmx6g"'
       if: '${{ steps.step-98.outcome == ''failure'' }}'
     - id: 'step-100'
       name: 'Upload compose logs'

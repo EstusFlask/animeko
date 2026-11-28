@@ -2,24 +2,6 @@
 
 `build.yml` 和 `release.yml` 由 `src.main.kts` 生成而来。详情参考 <https://typesafegithub.github.io/github-workflows-kt/>。
 
-`Build` 对 `main`、`release/**`、`emby-fix2` 和 `codex/opensubtitles-local-subtitles` 的代码推送自动运行，
-也支持手动选择分支运行。Windows 的 x64、ARM64 产物由 `createReleaseDistributable` 生成，属于 Release 便携包；
-Android 的普通分支检查产物为 Debug APK。打包、测试检查和产物验证是不同步骤，上传产物不代表整个工作流通过。
-
-依赖准备步骤通过 `ci-helper/run-gradle-with-retry.py` 执行 Gradle。依赖仓库返回 HTTP 429 时等待 30、60 秒重试，
-编译、测试和其他错误直接保留原退出码；工作流中各步骤的外层重试策略独立生效。
-Android Gradle 插件通过插件解析规则直接使用同版本的 `com.android.tools.build:gradle` 实现包；
-Android、AndroidX 和 Google 组件优先查询 Google Maven 仓库。
-`CI=true` 时，主构建和 `build-logic` 的其余组件优先使用
-[Google 托管的 Maven Central 镜像](https://docs.cloud.google.com/docs/buildpacks/java#google_cloud_hosted_maven_central_mirror)，其余仓库继续提供镜像中缺少的组件。
-
-托管的 Ubuntu 构建与 Android 设备测试任务中，Gradle 与 Kotlin 编译器的最大堆合计为 7 GB，
-最多使用两个 worker，为系统和原生编译工具保留内存。设备测试 APK 只包含模拟器使用的 ABI，应用打包任务覆盖全部发布 ABI。
-Windows 便携包验证的数据、应用日志和进程输出保存在 `update-e2e/windows-verify-*`，
-失败诊断随验证产物上传，原生输入断言和异常详情同时写入任务日志。
-Windows 验证脚本自测为每个子进程提供 120 秒预算，覆盖托管 ARM64 runner 的启动延迟，
-并校验成功与失败的退出码、标准输出、标准错误和应用诊断日志。
-
 `pr-images.yml` 直接维护，拒绝 PR 在资源目录以外新增图片和视频，防止验证截图进入 git 历史。
 
 `datasource-test-mcp.yml` 直接维护，构建自带 JBR 的 `tools/datasource-test-mcp` Windows 发行包，不依赖仓库环境即可运行，用法见该工具的 README。
@@ -48,24 +30,3 @@ Windows 验证脚本自测为每个子进程提供 120 秒预算，覆盖托管 
 uv run --with pyyaml python .github/workflows/test_issue_classification.py
 uv run --with pyyaml python .github/workflows/test_qa_review.py
 ```
-
-## iOS Release 与 LiveContainer 源
-
-`ios-livecontainer-release.yml` 直接维护，手动选择源分支或 commit（留空时使用运行工作流时选择的分支），通过上游 Gradle 任务构建 Release IPA，
-发布 `Animeko <版本号>`，资产名为 `Animeko-<版本号>.ipa`，应用名称为 `Animeko`、bundle ID 为 `org.animeko.animeko`。
-`publish_release=false` 时仅上传构建产物与诊断，不发布 Release 或更新 LiveContainer 源，适用于分支验证。
-ONNX Runtime iOS 依赖由 `prepare_onnxruntime_ios.py` 准备：验证固定 SHA512 的 Microsoft NuGet 包，
-提取设备与模拟器 XCFramework，并校验 Objective-C 源码提交与 NuGet 元数据一致。
-源码从 ROCm 的 ONNX Runtime 仓库按固定上游提交读取。临时 CocoaPods spec 仓库同时供宿主 Podfile 和 Kotlin 合成项目使用，
-其中归档通过 SHA256 校验；运行库版本与 `libs.versions.toml` 一致。仓库同时包含经过 SHA256 校验的 Sentry 8.49.2 官方 podspec，
-满足宿主的 `~> 8.49.0` 约束。构建依赖规格仅从准备的仓库解析，Sentry 源码仍由 CocoaPods 从官方仓库下载，
-依赖解析不访问公共 CDN。构建准备阶段运行离线回归测试、安装合成项目依赖并校验仓库配置。
-显示版本移除开发后缀，构建号单调递增。Release 同时包含 `ios-release.json` 元数据与 SHA256 校验。
-
-LiveContainer 订阅地址固定为 `https://github.com/EstusFlask/animeko/releases/download/livecontainer-source/source.json`。
-`livecontainer-source.yml` 在正式 Release 发布、编辑或删除时更新此资产，也支持手动运行。
-`livecontainer-source` 自身是独立的预发布源资产，不参与应用版本列表，不标记为最新应用 Release。
-
-手动发布时，先把 IPA 上传到草稿 Release，再点击发布；脚本可直接读取 IPA 的 Info.plist，无需自行编写源文件。
-源只收录正式发布且包含一个 Animeko IPA 的 Release，并保留历史版本。通过构建工作流发布时会直接调用相同脚本，
-因为 GITHUB_TOKEN 发出的 Release 事件不会触发其它工作流。将每次构建的旧源地址替换为上述固定地址后，后续无需重复添加源。

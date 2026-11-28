@@ -471,11 +471,10 @@ run {
         runTests = true,
         uploadDesktopInstallers = true,
         extraGradleArgs = listOf(
-            "--max-workers=2",
         ),
         buildAllAndroidAbis = true,
-        gradleHeap = "4g",
-        kotlinCompilerHeap = "3g",
+        gradleHeap = "8g",
+        kotlinCompilerHeap = "6g",
     )
     val ghMac15Intel = MatrixInstance(
         runner = Runner.GithubMacOS15Intel,
@@ -705,20 +704,6 @@ fun MatrixInstance.androidInstrumentedTestJobs(): List<AndroidInstrumentedTestJo
 
 fun WorkflowBuilder.addAndroidInstrumentedTestJobs(matrix: MatrixInstance) {
     for (testJob in matrix.androidInstrumentedTestJobs()) {
-        // 托管 runner 为系统、原生编译器和 Android 构建工具保留内存, 测试 APK 只包含模拟器使用的 ABI.
-        val testMatrix = if (matrix.selfHosted) matrix else MatrixInstance(
-            runner = matrix.runner,
-            runsOn = matrix.runsOn,
-            uploadApk = false,
-            composeResourceTriple = matrix.composeResourceTriple,
-            extraGradleArgs = (matrix.extraGradleArgs.filterNot { it.startsWith("-P$ANI_ANDROID_ABIS=") } + listOf(
-                "-P$ANI_ANDROID_ABIS=${testJob.emulators.first().arch.stringValue}",
-                "--max-workers=2",
-            )).distinct(),
-            buildAllAndroidAbis = false,
-            gradleHeap = "4g",
-            kotlinCompilerHeap = "3g",
-        )
         job(
             id = "android-test_${matrix.runner.id}_${testJob.id}",
             name = "Android Instrumented Test (${testJob.label})",
@@ -729,7 +714,7 @@ fun WorkflowBuilder.addAndroidInstrumentedTestJobs(matrix: MatrixInstance) {
             `if` = if (matrix.selfHosted) expr { github.isAnimekoRepository and github.isPush } else null,
         ) {
             uses(action = Checkout(submodules_Untyped = "recursive"))
-            with(WithMatrix(testMatrix)) {
+            with(WithMatrix(matrix)) {
                 freeSpace()
                 enableSwap()
                 deleteLocalProperties()
@@ -905,11 +890,6 @@ fun getVerifyJobBody(
     when (runner.os to runner.arch) {
         OS.WINDOWS to Arch.X64,
         OS.WINDOWS to Arch.AARCH64 -> {
-            run(
-                name = "Test Windows verification diagnostics",
-                shell = Shell.PowerShell,
-                command = "python -B -m unittest discover -s ci-helper -p test_windows_test_runner.py",
-            )
             // download-artifact 按内容类型自动解压 zip, 得到 Ani 目录.
             usesWithAttempts(
                 name = "Download Windows ${if (runner.arch == Arch.X64) "x64" else "AArch64"} Portable",
@@ -1084,14 +1064,6 @@ fun WorkflowBuilder.addConsistencyCheckJob(filename: String) {
         run(
             command = "pip3 install PyYAML",
         )
-        run(
-            name = "Test dependency download retries",
-            command = "python3 -B -m unittest discover -s ci-helper -p test_run_gradle_with_retry.py",
-        )
-        run(
-            name = "Test Android test runner budgets",
-            command = "python3 -B -m unittest discover -s ci-helper -p test_android_test_workflow.py",
-        )
         val originalPath = """.github/workflows/$filename"""
         val backupPath = """.github/workflows/$filename-check.yml"""
         run(
@@ -1126,7 +1098,7 @@ workflow(
     name = "Build",
     on = listOf(
         // 其他分支的提交由 PR 构建. 同一个提交同时触发 push 与 pull_request 会重复运行整个 workflow.
-        Push(branches = listOf("main", "release/**", "emby-fix2", "codex/opensubtitles-local-subtitles"), pathsIgnore = commonIgnoredPaths),
+        Push(branches = listOf("main", "release/**"), pathsIgnore = commonIgnoredPaths),
         PullRequest(pathsIgnore = commonIgnoredPaths),
         // 没有 PR 的分支需要构建时手动运行.
         WorkflowDispatch(),
@@ -1454,18 +1426,12 @@ class WithMatrix(
         timeoutMinutes: Int = 180,
         gradleArgs: String = matrix.gradleArgs,
         maxWorkers: Int? = null,
-        retryDependencyDownloads: Boolean = false,
     ) = runWithAttempts(
         name = name,
         `if` = `if`,
         timeoutMinutes = timeoutMinutes,
         command = buildString {
-            if (retryDependencyDownloads) {
-                append(if (matrix.isWindows) "python " else "python3 ")
-                append("ci-helper/run-gradle-with-retry.py ")
-            } else {
-                append("./gradlew ")
-            }
+            append("./gradlew ")
             tasks.joinTo(this, " ")
             append(' ')
             append(gradleArgs)
@@ -1794,7 +1760,6 @@ class WithMatrix(
         )
         runGradle(
             name = "Clean and download dependencies",
-            retryDependencyDownloads = true,
             tasks = arrayOf("--scan"),
             gradleArgs = matrix.gradleArgs.replace(
                 "--scan",

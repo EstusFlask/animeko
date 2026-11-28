@@ -47,12 +47,6 @@ kotlin {
     if (enableIos && buildIosFramework && getOs() == Os.MacOS) {
         // Sentry requires cocoapods for its dependencies
         extensions.configure<CocoapodsExtension> {
-            providers.environmentVariable("ANI_ONNXRUNTIME_SPEC_REPO").orNull?.let { repository ->
-                specRepos {
-                    url(repository)
-                }
-                usePreparedCocoaPodsSpecRepository(repository)
-            }
             // https://kotlinlang.org/docs/native-cocoapods.html#configure-existing-project
             framework {
                 baseName = "application"
