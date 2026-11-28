@@ -75,6 +75,8 @@ tasks.register("podInstall", Exec::class) {
         ":app:shared:application:podspec",
         patchInfoPlist,
     )
+    // CocoaPods installers share the global spec repositories and download cache.
+    mustRunAfter(":app:shared:application:podInstallSyntheticIos")
 
     workingDir(projectDir)
     commandLine("pod", "install")

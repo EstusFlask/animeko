@@ -138,17 +138,7 @@ internal class WindowsNativeInputHarness(
     }
 
     fun awaitEvent(timeoutMillis: Long = 5_000, predicate: (RecordedNativeEvent) -> Boolean): RecordedNativeEvent {
-        val deadline = System.currentTimeMillis() + timeoutMillis
-        while (System.currentTimeMillis() < deadline) {
-            events.firstOrNull(predicate)?.let { return it }
-            Thread.sleep(20)
-        }
-        throw WindowsNativeInputAssertionException(
-            "No matching pointer event within ${timeoutMillis}ms; recorded=" +
-                    events.joinToString { event ->
-                        "${event.type}${event.pointers.map { "${it.id}:${it.type}:${it.pressed}" }}"
-                    },
-        )
+        return awaitNativePointerEvent(events, timeoutMillis, predicate)
     }
 
     override fun close() {
@@ -156,6 +146,33 @@ internal class WindowsNativeInputHarness(
             windowProc.close()
             window.dispose()
         }
+    }
+}
+
+internal fun awaitNativePointerEvent(
+    events: List<RecordedNativeEvent>,
+    timeoutMillis: Long = 5_000,
+    predicate: (RecordedNativeEvent) -> Boolean,
+): RecordedNativeEvent {
+    val deadline = System.nanoTime() + timeoutMillis * 1_000_000
+    while (System.nanoTime() < deadline) {
+        events.firstOrNull(predicate)?.let { return it }
+        Thread.sleep(20)
+    }
+    throw WindowsNativeInputAssertionException(
+        "No matching pointer event within ${timeoutMillis}ms; recorded=" +
+                events.joinToString { event ->
+                    "${event.type}${event.pointers.map { "${it.id}:${it.type}:${it.pressed}" }}"
+                },
+    )
+}
+
+internal fun awaitNativeGestureRelease(
+    events: List<RecordedNativeEvent>,
+    timeoutMillis: Long = 5_000,
+): RecordedNativeEvent {
+    return awaitNativePointerEvent(events, timeoutMillis) { event ->
+        event.type == PointerEventType.Release && event.pointers.none { it.pressed }
     }
 }
 
@@ -215,7 +232,7 @@ internal fun verifyPinch(harness: WindowsNativeInputHarness) {
         harness.awaitEvent { event ->
             event.type == PointerEventType.Move && event.pointers.count { it.pressed } == 2
         }
-        harness.awaitEvent { it.type == PointerEventType.Release }
+        awaitNativeGestureRelease(harness.events)
         harness.events.filter { event ->
             event.type == PointerEventType.Move && event.pointers.count { it.pressed } == 2
         }

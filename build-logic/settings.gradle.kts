@@ -10,11 +10,33 @@
 // included build 不共享主构建的 repositories / 版本目录, 都要自己声明一遍.
 rootProject.name = "build-logic"
 
+pluginManagement {
+    repositories {
+        if (System.getenv("CI") == "true") {
+            maven("https://maven-central.storage-download.googleapis.com/maven2/") {
+                name = "CiMavenCentral"
+            }
+        }
+        gradlePluginPortal()
+    }
+}
+
 dependencyResolutionManagement {
     repositories {
+        google {
+            content {
+                includeGroupByRegex("com\\.android(\\..*)?")
+                includeGroupByRegex("com\\.google(\\..*)?")
+                includeGroupByRegex("androidx(\\..*)?")
+            }
+        }
+        if (System.getenv("CI") == "true") {
+            maven("https://maven-central.storage-download.googleapis.com/maven2/") {
+                name = "CiMavenCentral"
+            }
+        }
         gradlePluginPortal()
         mavenCentral()
-        google()
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev") // Compose Multiplatform pre-release versions
     }
     versionCatalogs {
