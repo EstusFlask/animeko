@@ -178,7 +178,7 @@ class PlayerSession(
             val openedEngineKey = (data as? TorrentMediaData)?.engineKey ?: resolvedEngineKey
             listener.onOpened(openedEngineKey, start.elapsedNow())
 
-            val platformPlayback = preparePlatformMediaPlayback(data)
+            val platformPlayback = preparePlatformMediaPlayback(data, startPositionMillis)
             val mediaCleanup = pendingMediaCleanup
             preparedPlatformPlayback = if (mediaCleanup == null) platformPlayback else {
                 PlatformMediaPlayback(platformPlayback.data) {
