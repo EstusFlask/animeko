@@ -4,11 +4,12 @@
  * https://github.com/open-ani/ani/blob/main/LICENSE
  */
 
-@file:OptIn(ExperimentalForeignApi::class)
+@file:OptIn(BetaInteropApi::class, ExperimentalForeignApi::class)
 
 package me.him188.ani.app.videoplayer.ui
 
 import kotlin.math.floor
+import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import me.him188.ani.app.videoplayer.subtitle.SubtitleAppearance
@@ -17,6 +18,7 @@ import me.him188.ani.app.videoplayer.subtitle.subtitleRegion
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
 import platform.Foundation.NSAttributedString
+import platform.Foundation.create
 import platform.UIKit.NSFontAttributeName
 import platform.UIKit.NSForegroundColorAttributeName
 import platform.UIKit.NSLineBreakByTruncatingTail
@@ -76,7 +78,7 @@ internal class IosSubtitleOverlay : UIView(CGRectMake(0.0, 0.0, 0.0, 0.0)) {
         label.textColor = subtitleColor(style.textColor)
         label.layer.shadowOpacity = 0f
         label.backgroundColor = if (style.backgroundEnabled) subtitleColor(style.backgroundColor, style.backgroundOpacity.toDouble()) else UIColor.clearColor
-        label.attributedText = NSAttributedString(string = label.text.orEmpty(), attributes = mapOf(
+        label.attributedText = NSAttributedString.create(string = label.text.orEmpty(), attributes = mapOf(
             NSFontAttributeName to label.font,
             NSForegroundColorAttributeName to subtitleColor(style.textColor),
             NSStrokeColorAttributeName to subtitleColor(style.outlineColor),
