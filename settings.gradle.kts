@@ -16,6 +16,11 @@ pluginManagement {
     includeBuild("build-logic")
 
     repositories {
+        if (System.getenv("CI") == "true") {
+            maven("https://maven-central.storage-download.googleapis.com/maven2/") {
+                name = "CiMavenCentral"
+            }
+        }
         gradlePluginPortal()
         mavenCentral()
         google()
@@ -28,6 +33,11 @@ dependencyResolutionManagement {
     repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
     @Suppress("UnstableApiUsage")
     repositories {
+        if (System.getenv("CI") == "true") {
+            maven("https://maven-central.storage-download.googleapis.com/maven2/") {
+                name = "CiMavenCentral"
+            }
+        }
         // mavenLocal 的位置不能动: 本地 mediamp / anitorrent 调试构建依赖它排在这里.
         mavenCentral()
         google()

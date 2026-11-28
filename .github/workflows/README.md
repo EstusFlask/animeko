@@ -8,6 +8,8 @@ Android 的普通分支检查产物为 Debug APK。打包、测试检查和产�
 
 依赖准备步骤通过 `ci-helper/run-gradle-with-retry.py` 执行 Gradle。依赖仓库返回 HTTP 429 时等待 30、60 秒重试，
 编译、测试和其他错误直接保留原退出码；工作流中各步骤的外层重试策略独立生效。
+`CI=true` 时，主构建和 `build-logic` 的插件、依赖仓库优先使用
+[Google 托管的 Maven Central 镜像](https://docs.cloud.google.com/docs/buildpacks/java#google_cloud_hosted_maven_central_mirror)，其余仓库继续提供镜像中缺少的组件。
 
 托管的 Ubuntu 构建与 Android 设备测试任务中，Gradle 与 Kotlin 编译器的最大堆合计为 7 GB，
 最多使用两个 worker，为系统和原生编译工具保留内存。设备测试 APK 只包含模拟器使用的 ABI，应用打包任务覆盖全部发布 ABI。
